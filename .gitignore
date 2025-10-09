@@ -1,0 +1,47 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+
+# Testing
+coverage/
+.nyc_output/
+*.lcov
+
+# Environment variables
+.env
+.env.local
+.env.*.local
+
+# Package files
+*.tgz
+
+# TypeScript
+*.tsbuildinfo
+
+# Cache
+.eslintcache
+.npm/
+.pnpm-store/
+
+# Temporary files
+*.tmp
+*.temp
+.tmp/
+.temp/

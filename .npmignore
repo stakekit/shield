@@ -1,0 +1,29 @@
+# Source files
+src/
+*.ts
+!dist/**/*.d.ts
+
+# Test files
+*.test.ts
+*.spec.ts
+jest.config.*
+jest.setup.*
+
+# Config files
+tsconfig.json
+tsconfig.*.json
+.gitignore
+.npmignore
+
+# Development files
+node_modules/
+coverage/
+*.log
+.DS_Store
+
+# CI/CD
+.github/
+.circleci/
+
+# Documentation source
+docs/

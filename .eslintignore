@@ -1,0 +1,18 @@
+# Dependencies
+node_modules
+
+# Build outputs
+dist
+lib
+*.d.ts
+
+# Test coverage
+coverage
+
+# IDE
+.vscode
+.idea
+
+# Temporary files
+*.log
+*.tmp
