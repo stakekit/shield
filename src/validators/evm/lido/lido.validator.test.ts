@@ -166,6 +166,34 @@ describe('LidoValidator via Shield', () => {
       expect(result.reason).toContain('No matching operation pattern found'); // Previously: toContain('Invalid referral address');
     });
 
+    it('should reject stake transaction with appended bytes', () => {
+      const tx = {
+        to: lidoStEthAddress,
+        from: userAddress,
+        value: '0xde0b6b3a7640000',
+        data: '0xa1903eab' + referralAddress.slice(2).padStart(64, '0') + 'deadbeef', // Extra bytes appended
+        nonce: 0,
+        gasLimit: '0x30d40',
+        gasPrice: '0x4a817c800',
+        chainId: 1,
+        type: 0,
+      };
+
+      const serialized = JSON.stringify(tx);
+      const result = shield.validate({
+        yieldId,
+        unsignedTransaction: serialized,
+        userAddress,
+      });
+
+      expect(result.isValid).toBe(false);
+      expect(result.reason).toContain('No matching operation pattern found');
+      const stakeAttempt = result.details?.attempts?.find(
+        (a: any) => a.type === TransactionType.STAKE,
+      );
+      expect(stakeAttempt?.reason).toContain('calldata has been tampered');
+    });
+
     it('should validate STAKE transaction', () => {
       const real = {
         from: '0x4546fC1b71375eA0fa4D8cA32B9F2C2ED4FB2E82',
@@ -339,6 +367,77 @@ describe('LidoValidator via Shield', () => {
 
       expect(result.isValid).toBe(false);
       expect(result.reason).toContain('No matching operation pattern found'); // Previously: toContain('Withdrawal amounts array is empty');
+    });
+
+    it('should reject unstake transaction with appended bytes', () => {
+      const tx = {
+        to: lidoWithdrawalQueueAddress,
+        from: userAddress,
+        value: '0x0',
+        data:
+          '0xd6681042' +
+          '0000000000000000000000000000000000000000000000000000000000000040' +
+          '000000000000000000000000' +
+          userAddress.slice(2) +
+          '0000000000000000000000000000000000000000000000000000000000000001' +
+          '0000000000000000000000000000000000000000000000000de0b6b3a7640000' +
+          'cafebabe', // Extra bytes
+        nonce: 0,
+        gasLimit: '0x493e0',
+        gasPrice: '0x4a817c800',
+        chainId: 1,
+        type: 0,
+      };
+
+      const serialized = JSON.stringify(tx);
+      const result = shield.validate({
+        yieldId,
+        unsignedTransaction: serialized,
+        userAddress,
+      });
+
+      expect(result.isValid).toBe(false);
+      expect(result.reason).toContain('No matching operation pattern found');
+      const unstakeAttempt = result.details?.attempts?.find(
+        (a: any) => a.type === TransactionType.UNSTAKE,
+      );
+      expect(unstakeAttempt?.reason).toContain('calldata has been tampered');
+    });
+
+    it('should reject unstake with multiple amounts and appended bytes', () => {
+      // requestWithdrawals([1 ETH, 2 ETH], owner) + extra bytes
+      const tx = {
+        to: lidoWithdrawalQueueAddress,
+        from: userAddress,
+        value: '0x0',
+        data:
+          '0xd6681042' +
+          '0000000000000000000000000000000000000000000000000000000000000040' +
+          '000000000000000000000000' +
+          userAddress.slice(2) +
+          '0000000000000000000000000000000000000000000000000000000000000002' + // 2 amounts
+          '0000000000000000000000000000000000000000000000000de0b6b3a7640000' + // 1 ETH
+          '0000000000000000000000000000000000000000000000001bc16d674ec80000' + // 2 ETH
+          '12345678', // Extra bytes
+        nonce: 0,
+        gasLimit: '0x493e0',
+        gasPrice: '0x4a817c800',
+        chainId: 1,
+        type: 0,
+      };
+
+      const serialized = JSON.stringify(tx);
+      const result = shield.validate({
+        yieldId,
+        unsignedTransaction: serialized,
+        userAddress,
+      });
+
+      expect(result.isValid).toBe(false);
+      const unstakeAttempt = result.details?.attempts?.find(
+        (a: any) => a.type === TransactionType.UNSTAKE,
+      );
+      expect(unstakeAttempt?.reason).toContain('calldata has been tampered');
     });
 
     it('should validate UNSTAKE transaction', () => {
@@ -561,6 +660,78 @@ describe('LidoValidator via Shield', () => {
 
       expect(result.isValid).toBe(false);
       expect(result.reason).toContain('No matching operation pattern found'); // Previously: toContain('arrays length mismatch');
+    });
+
+    it('should reject claimWithdrawal with appended bytes', () => {
+      const requestId = 123n;
+      const encodedParams = requestId.toString(16).padStart(64, '0');
+
+      const tx = {
+        to: lidoWithdrawalQueueAddress,
+        from: userAddress,
+        value: '0x0',
+        data: '0xf8444436' + encodedParams + '12345678', // Extra bytes
+        nonce: 0,
+        gasLimit: '0x30d40',
+        gasPrice: '0x4a817c800',
+        chainId: 1,
+        type: 0,
+      };
+
+      const serialized = JSON.stringify(tx);
+      const result = shield.validate({
+        yieldId,
+        unsignedTransaction: serialized,
+        userAddress,
+      });
+
+      expect(result.isValid).toBe(false);
+      expect(result.reason).toContain('No matching operation pattern found');
+      const claimAttempt = result.details?.attempts?.find(
+        (a: any) => a.type === TransactionType.CLAIM_UNSTAKED,
+      );
+      expect(claimAttempt?.reason).toContain('calldata has been tampered');
+    });
+
+    it('should reject claimWithdrawals with appended bytes', () => {
+      // Generate VALID calldata using ethers
+      const { ethers } = require('ethers');
+      const iface = new ethers.Interface([
+        'function claimWithdrawals(uint256[] _requestIds, uint256[] _hints)',
+      ]);
+      
+      const validCalldata = iface.encodeFunctionData('claimWithdrawals', [
+        [1n, 2n], // requestIds
+        [100n, 200n], // hints
+      ]);
+      
+      // Append malicious bytes
+      const tamperedCalldata = validCalldata + 'cafebabe';
+
+      const tx = {
+        to: lidoWithdrawalQueueAddress,
+        from: userAddress,
+        value: '0x0',
+        data: tamperedCalldata,
+        nonce: 0,
+        gasLimit: '0x30d40',
+        gasPrice: '0x4a817c800',
+        chainId: 1,
+        type: 0,
+      };
+
+      const serialized = JSON.stringify(tx);
+      const result = shield.validate({
+        yieldId,
+        unsignedTransaction: serialized,
+        userAddress,
+      });
+
+      expect(result.isValid).toBe(false);
+      const claimAttempt = result.details?.attempts?.find(
+        (a: any) => a.type === TransactionType.CLAIM_UNSTAKED,
+      );
+      expect(claimAttempt?.reason).toContain('calldata has been tampered');
     });
 
     it('should validate batch CLAIM_UNSTAKED transaction', () => {

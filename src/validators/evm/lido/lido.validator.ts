@@ -86,29 +86,23 @@ export class LidoValidator extends BaseEVMValidator {
       });
     }
 
-    try {
-      const parsed = this.lidoInterface.parseTransaction({
-        data: tx.data ?? '0x',
-        value: tx.value,
+    const result = this.parseAndValidateCalldata(tx);
+    if ('error' in result) return result.error;
+    
+    const { parsed } = result;
+
+    if (parsed.name !== 'submit') {
+      return this.blocked('Invalid method for staking', {
+        expected: 'submit',
+        actual: parsed.name,
       });
+    }
 
-      if (!isDefined(parsed) || parsed.name !== 'submit') {
-        return this.blocked('Invalid method for staking', {
-          expected: 'submit',
-          actual: parsed?.name ?? 'unknown',
-        });
-      }
-
-      const [referral] = parsed.args;
-      if (referral.toLowerCase() !== LIDO_REFERRAL.toLowerCase()) {
-        return this.blocked('Invalid referral address', {
-          expected: LIDO_REFERRAL,
-          actual: referral,
-        });
-      }
-    } catch (error) {
-      return this.blocked('Invalid transaction data for staking', {
-        error: error instanceof Error ? error.message : String(error),
+    const [referral] = parsed.args;
+    if (referral.toLowerCase() !== LIDO_REFERRAL.toLowerCase()) {
+      return this.blocked('Invalid referral address', {
+        expected: LIDO_REFERRAL,
+        actual: referral,
       });
     }
 
@@ -133,35 +127,29 @@ export class LidoValidator extends BaseEVMValidator {
       });
     }
 
-    try {
-      const parsed = this.lidoInterface.parseTransaction({
-        data: tx.data ?? '0x',
-        value: tx.value,
+    const result = this.parseAndValidateCalldata(tx);
+    if ('error' in result) return result.error;
+    
+    const { parsed } = result;
+
+    if (parsed.name !== 'requestWithdrawals') {
+      return this.blocked('Invalid method for unstaking', {
+        expected: 'requestWithdrawals',
+        actual: parsed.name,
       });
+    }
 
-      if (!isDefined(parsed) || parsed.name !== 'requestWithdrawals') {
-        return this.blocked('Invalid method for unstaking', {
-          expected: 'requestWithdrawals',
-          actual: parsed?.name ?? 'unknown',
-        });
-      }
+    const [amounts, owner] = parsed.args;
 
-      const [amounts, owner] = parsed.args;
-
-      if (owner.toLowerCase() !== userAddress.toLowerCase()) {
-        return this.blocked('Withdrawal request owner is not user address', {
-          expected: userAddress,
-          actual: owner,
-        });
-      }
-
-      if (!Array.isArray(amounts) || amounts.length === 0) {
-        return this.blocked('Withdrawal amounts array is empty');
-      }
-    } catch (error) {
-      return this.blocked('Invalid transaction data for unstaking', {
-        error: error instanceof Error ? error.message : String(error),
+    if (owner.toLowerCase() !== userAddress.toLowerCase()) {
+      return this.blocked('Withdrawal request owner is not user address', {
+        expected: userAddress,
+        actual: owner,
       });
+    }
+
+    if (!Array.isArray(amounts) || amounts.length === 0) {
+      return this.blocked('Withdrawal amounts array is empty');
     }
 
     return this.safe();
@@ -182,42 +170,72 @@ export class LidoValidator extends BaseEVMValidator {
       });
     }
 
+    const result = this.parseAndValidateCalldata(tx);
+    if ('error' in result) return result.error;
+    
+    const { parsed } = result;
+
+    if (parsed.name === 'claimWithdrawal') {
+      return this.safe();
+    } else if (parsed.name === 'claimWithdrawals') {
+      const [requestIds, hints] = parsed.args;
+
+      if (requestIds.length === 0) {
+        return this.blocked('Request IDs array is empty');
+      }
+
+      if (requestIds.length !== hints.length) {
+        return this.blocked('Request IDs and hints arrays length mismatch', {
+          requestIdsLength: requestIds.length,
+          hintsLength: hints.length,
+        });
+      }
+      
+      return this.safe();
+    } else {
+      return this.blocked('Invalid method for claiming', {
+        expected: 'claimWithdrawal or claimWithdrawals',
+        actual: parsed.name,
+      });
+    }
+  }
+
+  /**
+   * Parse transaction and validate calldata integrity
+   */
+  private parseAndValidateCalldata(
+    tx: EVMTransaction,
+  ): { parsed: ethers.TransactionDescription } | { error: ValidationResult } {
     try {
       const parsed = this.lidoInterface.parseTransaction({
         data: tx.data ?? '0x',
         value: tx.value,
       });
 
-      if (!isDefined(parsed)) {
-        return this.blocked('Invalid transaction data for claiming');
+      if (!parsed) {
+        return {
+          error: this.blocked('Failed to parse transaction data'),
+        };
       }
 
-      if (parsed.name === 'claimWithdrawal') {
-        return this.safe();
-      } else if (parsed.name === 'claimWithdrawals') {
-        const [requestIds, hints] = parsed.args;
-
-        if (requestIds.length === 0) {
-          return this.blocked('Request IDs array is empty');
-        }
-
-        if (requestIds.length !== hints.length) {
-          return this.blocked('Request IDs and hints arrays length mismatch', {
-            requestIdsLength: requestIds.length,
-            hintsLength: hints.length,
-          });
-        }
-        return this.safe();
-      } else {
-        return this.blocked('Invalid method for claiming', {
-          expected: 'claimWithdrawal or claimWithdrawals',
-          actual: parsed.name,
-        });
+      // Check for tampering
+      const tamperErr = this.ensureCalldataNotTampered(
+        tx.data ?? '0x',
+        this.lidoInterface,
+        parsed,
+      );
+      
+      if (tamperErr) {
+        return { error: tamperErr };
       }
+
+      return { parsed };
     } catch (error) {
-      return this.blocked('Invalid transaction data for claiming', {
-        error: error instanceof Error ? error.message : String(error),
-      });
+      return {
+        error: this.blocked('Invalid transaction data', {
+          error: error instanceof Error ? error.message : String(error),
+        }),
+      };
     }
   }
 }
