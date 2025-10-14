@@ -1,5 +1,6 @@
 import { Shield } from '../../../shield';
 import { TransactionType } from '../../../types';
+import { ethers } from 'ethers';
 
 describe('LidoValidator via Shield', () => {
   const shield = new Shield();
@@ -171,7 +172,10 @@ describe('LidoValidator via Shield', () => {
         to: lidoStEthAddress,
         from: userAddress,
         value: '0xde0b6b3a7640000',
-        data: '0xa1903eab' + referralAddress.slice(2).padStart(64, '0') + 'deadbeef', // Extra bytes appended
+        data:
+          '0xa1903eab' +
+          referralAddress.slice(2).padStart(64, '0') +
+          'deadbeef', // Extra bytes appended
         nonce: 0,
         gasLimit: '0x30d40',
         gasPrice: '0x4a817c800',
@@ -695,16 +699,15 @@ describe('LidoValidator via Shield', () => {
 
     it('should reject claimWithdrawals with appended bytes', () => {
       // Generate VALID calldata using ethers
-      const { ethers } = require('ethers');
       const iface = new ethers.Interface([
         'function claimWithdrawals(uint256[] _requestIds, uint256[] _hints)',
       ]);
-      
+
       const validCalldata = iface.encodeFunctionData('claimWithdrawals', [
         [1n, 2n], // requestIds
         [100n, 200n], // hints
       ]);
-      
+
       // Append malicious bytes
       const tamperedCalldata = validCalldata + 'cafebabe';
 

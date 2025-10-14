@@ -88,7 +88,7 @@ export class LidoValidator extends BaseEVMValidator {
 
     const result = this.parseAndValidateCalldata(tx);
     if ('error' in result) return result.error;
-    
+
     const { parsed } = result;
 
     if (parsed.name !== 'submit') {
@@ -129,7 +129,7 @@ export class LidoValidator extends BaseEVMValidator {
 
     const result = this.parseAndValidateCalldata(tx);
     if ('error' in result) return result.error;
-    
+
     const { parsed } = result;
 
     if (parsed.name !== 'requestWithdrawals') {
@@ -172,7 +172,7 @@ export class LidoValidator extends BaseEVMValidator {
 
     const result = this.parseAndValidateCalldata(tx);
     if ('error' in result) return result.error;
-    
+
     const { parsed } = result;
 
     if (parsed.name === 'claimWithdrawal') {
@@ -190,7 +190,7 @@ export class LidoValidator extends BaseEVMValidator {
           hintsLength: hints.length,
         });
       }
-      
+
       return this.safe();
     } else {
       return this.blocked('Invalid method for claiming', {
@@ -212,7 +212,7 @@ export class LidoValidator extends BaseEVMValidator {
         value: tx.value,
       });
 
-      if (!parsed) {
+      if (!isDefined(parsed)) {
         return {
           error: this.blocked('Failed to parse transaction data'),
         };
@@ -224,7 +224,7 @@ export class LidoValidator extends BaseEVMValidator {
         this.lidoInterface,
         parsed,
       );
-      
+
       if (tamperErr) {
         return { error: tamperErr };
       }

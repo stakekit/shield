@@ -102,36 +102,36 @@ export abstract class BaseEVMValidator extends BaseValidator {
     return null;
   }
 
-    protected ensureCalldataNotTampered(
-      originalCalldata: string,
-      iface: ethers.Interface,
-      parsedTx: ethers.TransactionDescription,
-    ): ValidationResult | null {
-      try {
-        // Re-encode the function call with the parsed arguments
-        const expectedCalldata = iface.encodeFunctionData(
-          parsedTx.name,
-          parsedTx.args,
-        );
+  protected ensureCalldataNotTampered(
+    originalCalldata: string,
+    iface: ethers.Interface,
+    parsedTx: ethers.TransactionDescription,
+  ): ValidationResult | null {
+    try {
+      // Re-encode the function call with the parsed arguments
+      const expectedCalldata = iface.encodeFunctionData(
+        parsedTx.name,
+        parsedTx.args,
+      );
 
-        // Normalize both to lowercase for comparison
-        const normalizedOriginal = originalCalldata.toLowerCase();
-        const normalizedExpected = expectedCalldata.toLowerCase();
+      // Normalize both to lowercase for comparison
+      const normalizedOriginal = originalCalldata.toLowerCase();
+      const normalizedExpected = expectedCalldata.toLowerCase();
 
-        // Check if they match exactly
-        if (normalizedOriginal !== normalizedExpected) {
-          return this.blocked('Transaction calldata has been tampered with', {
-            expectedLength: expectedCalldata.length,
-            actualLength: originalCalldata.length,
-            lengthDifference: originalCalldata.length - expectedCalldata.length,
-          });
-        }
-
-        return null;
-      } catch (error) {
-        return this.blocked('Failed to validate calldata integrity', {
-          error: error instanceof Error ? error.message : String(error),
+      // Check if they match exactly
+      if (normalizedOriginal !== normalizedExpected) {
+        return this.blocked('Transaction calldata has been tampered with', {
+          expectedLength: expectedCalldata.length,
+          actualLength: originalCalldata.length,
+          lengthDifference: originalCalldata.length - expectedCalldata.length,
         });
       }
+
+      return null;
+    } catch (error) {
+      return this.blocked('Failed to validate calldata integrity', {
+        error: error instanceof Error ? error.message : String(error),
+      });
     }
+  }
 }
