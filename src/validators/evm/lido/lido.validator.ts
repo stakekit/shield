@@ -86,7 +86,7 @@ export class LidoValidator extends BaseEVMValidator {
       });
     }
 
-    const result = this.parseAndValidateCalldata(tx);
+    const result = this.parseAndValidateCalldata(tx, this.lidoInterface);
     if ('error' in result) return result.error;
 
     const { parsed } = result;
@@ -127,7 +127,7 @@ export class LidoValidator extends BaseEVMValidator {
       });
     }
 
-    const result = this.parseAndValidateCalldata(tx);
+    const result = this.parseAndValidateCalldata(tx, this.lidoInterface);
     if ('error' in result) return result.error;
 
     const { parsed } = result;
@@ -170,7 +170,7 @@ export class LidoValidator extends BaseEVMValidator {
       });
     }
 
-    const result = this.parseAndValidateCalldata(tx);
+    const result = this.parseAndValidateCalldata(tx, this.lidoInterface);
     if ('error' in result) return result.error;
 
     const { parsed } = result;
@@ -197,45 +197,6 @@ export class LidoValidator extends BaseEVMValidator {
         expected: 'claimWithdrawal or claimWithdrawals',
         actual: parsed.name,
       });
-    }
-  }
-
-  /**
-   * Parse transaction and validate calldata integrity
-   */
-  private parseAndValidateCalldata(
-    tx: EVMTransaction,
-  ): { parsed: ethers.TransactionDescription } | { error: ValidationResult } {
-    try {
-      const parsed = this.lidoInterface.parseTransaction({
-        data: tx.data ?? '0x',
-        value: tx.value,
-      });
-
-      if (!isDefined(parsed)) {
-        return {
-          error: this.blocked('Failed to parse transaction data'),
-        };
-      }
-
-      // Check for tampering
-      const tamperErr = this.ensureCalldataNotTampered(
-        tx.data ?? '0x',
-        this.lidoInterface,
-        parsed,
-      );
-
-      if (tamperErr) {
-        return { error: tamperErr };
-      }
-
-      return { parsed };
-    } catch (error) {
-      return {
-        error: this.blocked('Invalid transaction data', {
-          error: error instanceof Error ? error.message : String(error),
-        }),
-      };
     }
   }
 }

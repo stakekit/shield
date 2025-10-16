@@ -102,6 +102,43 @@ export abstract class BaseEVMValidator extends BaseValidator {
     return null;
   }
 
+  protected parseAndValidateCalldata(
+    tx: EVMTransaction,
+    iface: ethers.Interface,
+  ): { parsed: ethers.TransactionDescription } | { error: ValidationResult } {
+    try {
+      const parsed = iface.parseTransaction({
+        data: tx.data ?? '0x',
+        value: tx.value,
+      });
+
+      if (!parsed) {
+        return {
+          error: this.blocked('Failed to parse transaction data'),
+        };
+      }
+
+      // Check for tampering
+      const tamperErr = this.ensureCalldataNotTampered(
+        tx.data ?? '0x',
+        iface,
+        parsed,
+      );
+      
+      if (tamperErr) {
+        return { error: tamperErr };
+      }
+
+      return { parsed };
+    } catch (error) {
+      return {
+        error: this.blocked('Invalid transaction data', {
+          error: error instanceof Error ? error.message : String(error),
+        }),
+      };
+    }
+  }
+
   protected ensureCalldataNotTampered(
     originalCalldata: string,
     iface: ethers.Interface,
