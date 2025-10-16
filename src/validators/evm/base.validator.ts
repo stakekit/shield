@@ -112,7 +112,7 @@ export abstract class BaseEVMValidator extends BaseValidator {
         value: tx.value,
       });
 
-      if (!parsed) {
+      if (!isDefined(parsed)) {
         return {
           error: this.blocked('Failed to parse transaction data'),
         };
@@ -124,7 +124,7 @@ export abstract class BaseEVMValidator extends BaseValidator {
         iface,
         parsed,
       );
-      
+
       if (tamperErr) {
         return { error: tamperErr };
       }

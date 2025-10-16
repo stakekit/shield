@@ -5,7 +5,6 @@ import {
   ValidationContext,
   ValidationResult,
 } from '../../../types';
-import { isDefined } from '../../../utils/validation';
 import { BaseEVMValidator, EVMTransaction } from '../base.validator';
 
 const LIDO_CONTRACTS = {
