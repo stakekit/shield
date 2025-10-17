@@ -1,6 +1,7 @@
 import { BaseValidator } from '../base.validator';
 import { ValidationResult } from '../../types';
 import { isDefined, isNonEmptyString } from '../../utils/validation';
+import { ethers } from 'ethers';
 
 export interface EVMTransaction {
   to: string | null;
@@ -99,5 +100,75 @@ export abstract class BaseEVMValidator extends BaseValidator {
       });
     }
     return null;
+  }
+
+  protected parseAndValidateCalldata(
+    tx: EVMTransaction,
+    iface: ethers.Interface,
+  ): { parsed: ethers.TransactionDescription } | { error: ValidationResult } {
+    try {
+      const parsed = iface.parseTransaction({
+        data: tx.data ?? '0x',
+        value: tx.value,
+      });
+
+      if (!isDefined(parsed)) {
+        return {
+          error: this.blocked('Failed to parse transaction data'),
+        };
+      }
+
+      // Check for tampering
+      const tamperErr = this.ensureCalldataNotTampered(
+        tx.data ?? '0x',
+        iface,
+        parsed,
+      );
+
+      if (tamperErr) {
+        return { error: tamperErr };
+      }
+
+      return { parsed };
+    } catch (error) {
+      return {
+        error: this.blocked('Invalid transaction data', {
+          error: error instanceof Error ? error.message : String(error),
+        }),
+      };
+    }
+  }
+
+  protected ensureCalldataNotTampered(
+    originalCalldata: string,
+    iface: ethers.Interface,
+    parsedTx: ethers.TransactionDescription,
+  ): ValidationResult | null {
+    try {
+      // Re-encode the function call with the parsed arguments
+      const expectedCalldata = iface.encodeFunctionData(
+        parsedTx.name,
+        parsedTx.args,
+      );
+
+      // Normalize both to lowercase for comparison
+      const normalizedOriginal = originalCalldata.toLowerCase();
+      const normalizedExpected = expectedCalldata.toLowerCase();
+
+      // Check if they match exactly
+      if (normalizedOriginal !== normalizedExpected) {
+        return this.blocked('Transaction calldata has been tampered with', {
+          expectedLength: expectedCalldata.length,
+          actualLength: originalCalldata.length,
+          lengthDifference: originalCalldata.length - expectedCalldata.length,
+        });
+      }
+
+      return null;
+    } catch (error) {
+      return this.blocked('Failed to validate calldata integrity', {
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
   }
 }
