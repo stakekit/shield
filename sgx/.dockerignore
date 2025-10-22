@@ -1,8 +1,18 @@
-# Dependencies
+# Node modules (will be installed in container)
 node_modules/
+.pnpm-store/
 
-# Build output
+# Git
+.git/
+.gitignore
+
+# Build artifacts
 dist/
+*.manifest
+*.manifest.sgx
+*.sig
+*.token
+OUTPUT/
 
 # IDE
 .idea/
@@ -29,16 +39,9 @@ coverage/
 .env.local
 .env.*.local
 
-# Package files
-*.tgz
-
-# TypeScript
-*.tsbuildinfo
-
 # Cache
 .eslintcache
 .npm/
-.pnpm-store/
 
 # Temporary files
 *.tmp
@@ -46,9 +49,6 @@ coverage/
 .tmp/
 .temp/
 
-# SGX build artifacts
-sgx/*.manifest
-sgx/*.manifest.sgx
-sgx/*.sig
-sgx/*.token
-sgx/OUTPUT/
+# Documentation (not needed in container)
+README.md
+LICENSE

@@ -16,6 +16,16 @@
 npm install @yieldxyz/shield
 ```
 
+## 🔒 Intel SGX Support
+
+Shield can run inside an Intel SGX enclave for hardware-level security guarantees. See [sgx/README.md](./sgx/README.md) for details.
+
+```bash
+# Quick start with SGX
+npm run sgx:build
+npm run sgx:run
+```
+
 ## Usage
 
 ```typescript

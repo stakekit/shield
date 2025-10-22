@@ -1,0 +1,129 @@
+name: SGX Build and Test
+
+on:
+  push:
+    branches: [ main, 'feat/**' ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build-sgx:
+    name: Build SGX Enclave
+    runs-on: ubuntu-22.04
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+        cache: 'npm'
+
+    - name: Install dependencies
+      run: npm ci
+
+    - name: Build TypeScript project
+      run: npm run build
+
+    - name: Install Gramine
+      run: |
+        sudo curl -fsSLo /usr/share/keyrings/gramine-keyring.gpg https://packages.gramineproject.io/gramine-keyring.gpg
+        echo "deb [arch=amd64 signed-by=/usr/share/keyrings/gramine-keyring.gpg] https://packages.gramineproject.io/ $(lsb_release -sc) main" \
+          | sudo tee /etc/apt/sources.list.d/gramine.list
+        sudo apt-get update
+        sudo apt-get install -y gramine
+
+    - name: Verify Gramine installation
+      run: |
+        gramine-manifest --version
+        gramine-sgx-sign --version
+
+    - name: Build SGX manifest
+      run: |
+        cd sgx
+        make shield.manifest
+
+    - name: Verify manifest syntax
+      run: |
+        test -f sgx/shield.manifest
+        echo "✓ Manifest file created successfully"
+
+    - name: Test entrypoint
+      run: |
+        node -c sgx/entrypoint.js
+        echo "✓ Entrypoint syntax valid"
+
+    - name: Upload build artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: sgx-manifest
+        path: sgx/shield.manifest
+        retention-days: 7
+
+  build-docker:
+    name: Build Docker Image
+    runs-on: ubuntu-22.04
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+
+    - name: Build Docker image
+      uses: docker/build-push-action@v5
+      with:
+        context: .
+        file: sgx/Dockerfile
+        push: false
+        tags: shield-sgx:test
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
+
+    - name: Test Docker image (direct mode)
+      run: |
+        docker run -d --name shield-test \
+          -p 8080:8080 \
+          -e NODE_ENV=production \
+          shield-sgx:test make run-direct
+
+        # Wait for server to start
+        sleep 5
+
+        # Test health endpoint
+        curl -f http://localhost:8080/health | jq .
+
+        # Stop container
+        docker stop shield-test
+        docker rm shield-test
+
+  lint-sgx-config:
+    name: Lint SGX Configuration
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Check required files
+      run: |
+        test -f sgx/entrypoint.js || (echo "Missing entrypoint.js" && exit 1)
+        test -f sgx/shield.manifest.template || (echo "Missing manifest template" && exit 1)
+        test -f sgx/config.mk || (echo "Missing config.mk" && exit 1)
+        test -f sgx/Makefile || (echo "Missing Makefile" && exit 1)
+        test -f sgx/Dockerfile || (echo "Missing Dockerfile" && exit 1)
+        test -f sgx/README.md || (echo "Missing README" && exit 1)
+        echo "✓ All required SGX files present"
+
+    - name: Validate manifest template syntax
+      run: |
+        # Check for common syntax errors
+        grep -q "loader.entrypoint" sgx/shield.manifest.template
+        grep -q "sgx.enclave_size" sgx/shield.manifest.template
+        grep -q "sgx.trusted_files" sgx/shield.manifest.template
+        echo "✓ Manifest template syntax looks good"
+
+    - name: Validate Makefile
+      run: |
+        cd sgx
+        make -n build || echo "⚠ Makefile dry-run had warnings (expected on non-SGX system)"

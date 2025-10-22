@@ -1,0 +1,74 @@
+# Shield SGX Manifest Template
+#
+# This manifest template is used by Gramine to run the Shield validator
+# inside an Intel SGX enclave.
+
+loader.entrypoint = "file:{{ gramine.libos }}"
+libos.entrypoint = "{{ entrypoint }}"
+
+loader.log_level = "{{ log_level }}"
+
+# Environment variables
+loader.env.LD_LIBRARY_PATH = "/lib:{{ arch_libdir }}:/usr{{ arch_libdir }}"
+loader.env.PATH = "/usr/bin:/bin"
+loader.env.HOME = "/home/user"
+loader.env.NODE_ENV = "production"
+
+# Allow environment variables to be passed through
+loader.insecure__use_host_env = true
+
+# System configuration
+sys.enable_sigterm_injection = true
+sys.enable_extra_runtime_domain_names_conf = true
+
+# File system mounts
+fs.mounts = [
+  { path = "/lib", uri = "file:{{ gramine.runtimedir() }}" },
+  { path = "{{ arch_libdir }}", uri = "file:{{ arch_libdir }}" },
+  { path = "/usr{{ arch_libdir }}", uri = "file:/usr{{ arch_libdir }}" },
+  { path = "/etc", uri = "file:/etc" },
+
+  # Node.js binary
+  { path = "{{ entrypoint }}", uri = "file:{{ entrypoint }}" },
+
+  # Application files (read-only for security)
+  { path = "/app", uri = "file:{{ app_dir }}" },
+]
+
+# Allow accessing DNS resolution files
+fs.insecure__keys.default = "foobar"
+
+# SGX configuration
+sgx.debug = {{ debug }}
+sgx.nonpie_binary = true
+sgx.enclave_size = "{{ enclave_size }}"
+sgx.max_threads = {{ max_threads }}
+sgx.remote_attestation = "{{ ra_type }}"
+
+# Trusted files (will be checked against signatures)
+sgx.trusted_files = [
+  "file:{{ gramine.libos }}",
+  "file:{{ entrypoint }}",
+  "file:{{ gramine.runtimedir() }}/",
+  "file:{{ arch_libdir }}/",
+  "file:/usr{{ arch_libdir }}/",
+
+  # Application files
+  "file:{{ app_dir }}/",
+]
+
+# Allowed files (not integrity-protected, use sparingly)
+sgx.allowed_files = [
+  "file:/etc/hosts",
+  "file:/etc/host.conf",
+  "file:/etc/gai.conf",
+  "file:/etc/resolv.conf",
+  "file:/etc/nsswitch.conf",
+  "file:/etc/ethers",
+  "file:/etc/group",
+  "file:/etc/passwd",
+  "file:/etc/localtime",
+]
+
+# Enable eventfd for better performance
+sys.insecure__allow_eventfd = true

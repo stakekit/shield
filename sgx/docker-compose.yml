@@ -1,0 +1,43 @@
+version: '3.8'
+
+services:
+  shield-sgx:
+    build:
+      context: ..
+      dockerfile: sgx/Dockerfile
+    container_name: shield-sgx-validator
+    ports:
+      - "8080:8080"
+    environment:
+      - NODE_ENV=production
+      - PORT=8080
+    # For SGX support, you need to mount the SGX devices
+    devices:
+      - /dev/sgx_enclave
+      - /dev/sgx_provision
+    volumes:
+      # Mount AESMD socket for attestation
+      - /var/run/aesmd:/var/run/aesmd
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Optional: Run in direct mode (without SGX) for testing
+  shield-direct:
+    build:
+      context: ..
+      dockerfile: sgx/Dockerfile
+    container_name: shield-direct-validator
+    ports:
+      - "8081:8080"
+    environment:
+      - NODE_ENV=production
+      - PORT=8080
+    command: ["make", "run-direct"]
+    restart: unless-stopped
+    profiles:
+      - testing

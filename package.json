@@ -39,7 +39,12 @@
     "test:coverage": "jest --coverage",
     "clean": "rm -rf dist",
     "lint": "eslint \"src/**/*.ts\"",
-    "prepublishOnly": "npm run clean && npm run build && npm test"
+    "prepublishOnly": "npm run clean && npm run build && npm test",
+    "sgx:build": "npm run build && cd sgx && make build",
+    "sgx:run": "cd sgx && make run",
+    "sgx:run-direct": "cd sgx && make run-direct",
+    "sgx:test": "npm run build && cd sgx && make test",
+    "sgx:clean": "cd sgx && make clean"
   },
   "dependencies": {
     "@solana/web3.js": "^1.95.3",
