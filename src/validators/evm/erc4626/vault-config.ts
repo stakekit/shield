@@ -14,30 +14,16 @@ let lastFetchTime: number = 0;
  */
 const NETWORK_TO_CHAIN_ID: Record<string, number> = {
   ethereum: 1,
-  'ethereum-goerli': 5,
-  'ethereum-holesky': 17000,
-  'ethereum-sepolia': 11155111,
-  'ethereum-hoodi': 560048,
   arbitrum: 42161,
   optimism: 10,
   polygon: 137,
-  'polygon-amoy': 80002,
   base: 8453,
-  'base-sepolia': 84532,
   gnosis: 100,
-  'avalanche-c': 43114,
   binance: 56,
-  fantom: 250,
-  harmony: 1666600000,
-  celo: 42220,
-  viction: 88,
-  linea: 59144,
-  zksync: 324,
-  core: 1116,
   sonic: 146,
   unichain: 130,
   katana: 747474,
-  hyperevm: 999,
+  avalanche: 43114,   
 };
 
 /**
@@ -49,13 +35,11 @@ const WETH_ADDRESSES: Record<number, string> = {
   10: '0x4200000000000000000000000000000000000006',     // Optimism
   8453: '0x4200000000000000000000000000000000000006',   // Base
   137: '0x7ceb23fd6bc0add59e62ac25578270cff1b9f619',   // Polygon
-  100: '0x6a023ccd1ff6f2045c3309768ead9e68f978f6e1',   // Gnosis (WETH)
+  100: '0x6a023ccd1ff6f2045c3309768ead9e68f978f6e1',   // Gnosis
   43114: '0x49d5c2bdffac6ce2bfdb6640f4f80f226bc10bab',// Avalanche (WETH.e)
   56: '0x2170ed0880ac9a755fd29b2688956bd959f933f8',   // Binance (ETH)
-  250: '0x74b23882a30290451a17c44f4f05243b6b58c76d',  // Fantom (WETH)
-  42220: '0x122013fd7df1c6f636a5bb8f03108e876548b455', // Celo (WETH)
-  59144: '0xe5d7c2a44ffddf6b295a15c148167daaaf5cf34f', // Linea (WETH)
-  324: '0x5aea5775959fbc2557cc8789bc1bf90a239d9a91',   // zkSync (WETH)
+  146: '0x50c42dEAcD8Fc9773493ED674b675bE577f2634b',   // Sonic
+  130: '0x4200000000000000000000000000000000000006',   // Unichain 
 };
 
 /**
