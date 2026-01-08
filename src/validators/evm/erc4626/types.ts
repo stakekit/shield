@@ -10,6 +10,8 @@ export interface VaultInfo {
   vaultTokenAddress: string; // Vault share token
   network: string;           // e.g., 'ethereum', 'arbitrum'
   isWethVault?: boolean;     // Supports native ETH deposits
+  canEnter?: boolean;      // Whether deposits are enabled
+  canExit?: boolean;       // Whether withdrawals are enabled
 }
 
 /**
