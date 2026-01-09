@@ -159,6 +159,80 @@ describe('handleJsonRequest', () => {
     });
   });
 
+  describe('optional parameters: args and context', () => {
+    const userAddress = '0x742d35cc6634c0532925a3b844bc9e7595f0beb8';
+    const referralAddress = '0x371240E80Bf84eC2bA8b55aE2fD0B467b16Db2be';
+
+    const validLidoStakeTx = {
+      to: '0xae7ab96520DE3A18E5e111B5EaAb095312D7fE84',
+      from: userAddress,
+      value: '0xde0b6b3a7640000',
+      data: '0xa1903eab' + referralAddress.slice(2).padStart(64, '0'),
+      chainId: 1,
+    };
+
+    it('should forward args parameter to Shield validator', () => {
+      const response = call({
+        apiVersion: '1.0',
+        operation: 'validate',
+        yieldId: 'ethereum-eth-lido-staking',
+        unsignedTransaction: JSON.stringify(validLidoStakeTx),
+        userAddress: userAddress,
+        args: {
+          amount: '1000000000000000000',
+        },
+      });
+
+      expect(response.ok).toBe(true);
+      expect(response.result.isValid).toBe(true);
+    });
+
+    it('should forward context parameter to Shield validator', () => {
+    const response = call({
+        apiVersion: '1.0',
+        operation: 'validate',
+        yieldId: 'ethereum-eth-lido-staking',
+        unsignedTransaction: JSON.stringify(validLidoStakeTx),
+        userAddress: userAddress,
+        context: {
+        feeConfiguration: [
+            {
+            depositFeeBps: 100,
+            feeRecipientAddress: '0x1234567890123456789012345678901234567890',
+            },
+        ],
+        },
+    });
+
+    expect(response.ok).toBe(true);
+    expect(response.result.isValid).toBe(true);
+    });
+
+    it('should forward both args and context parameters together', () => {
+    const response = call({
+        apiVersion: '1.0',
+        operation: 'validate',
+        yieldId: 'ethereum-eth-lido-staking',
+        unsignedTransaction: JSON.stringify(validLidoStakeTx),
+        userAddress: userAddress,
+        args: {
+        amount: '1000000000000000000',
+        },
+        context: {
+        feeConfiguration: [
+            {
+            depositFeeBps: 50,
+            feeRecipientAddress: '0x1234567890123456789012345678901234567890',
+            },
+        ],
+        },
+    });
+
+    expect(response.ok).toBe(true);
+    expect(response.result.isValid).toBe(true);
+    });
+  });
+
   describe('isSupported operation', () => {
     it('should return supported: true for known yield', () => {
       const response = call({

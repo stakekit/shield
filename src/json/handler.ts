@@ -107,6 +107,17 @@ export function handleJsonRequest(jsonInput: string): string {
         return JSON.stringify(handleIsSupported(validRequest, requestHash));
       case 'getSupportedYieldIds':
         return JSON.stringify(handleGetSupportedYieldIds(requestHash));
+      default: {
+        // SECURITY: Defense-in-depth - schema validation should prevent this
+        const exhaustiveCheck: never = validRequest.operation;
+        return JSON.stringify(
+          errorResponse(
+            'INTERNAL_ERROR',
+            `Unknown operation: ${exhaustiveCheck}`,
+            requestHash,
+          ),
+        );
+      }
     }
   } catch (e) {
     // SECURITY: Never expose internal error details in production
