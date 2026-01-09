@@ -15,7 +15,7 @@ export interface JsonSuccessResponse<T> {
   apiVersion: '1.0';
   result: T;
   meta: {
-    requestHash: string;  // SHA-256 of request for integrity verification
+    requestHash: string; // SHA-256 of request for integrity verification
   };
 }
 
@@ -34,11 +34,11 @@ export interface JsonErrorResponse {
 
 export type JsonResponse<T> = JsonSuccessResponse<T> | JsonErrorResponse;
 
-export type ErrorCode = 
-  | 'PARSE_ERROR'           // Invalid JSON syntax
+export type ErrorCode =
+  | 'PARSE_ERROR' // Invalid JSON syntax
   | 'SCHEMA_VALIDATION_ERROR' // Failed Ajv validation
-  | 'MISSING_REQUIRED_FIELD'  // Operation-specific required field missing
-  | 'INTERNAL_ERROR';         // Unexpected error (should never happen)
+  | 'MISSING_REQUIRED_FIELD' // Operation-specific required field missing
+  | 'INTERNAL_ERROR'; // Unexpected error (should never happen)
 
 // Result types for each operation
 export interface ValidateResult {

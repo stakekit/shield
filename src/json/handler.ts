@@ -2,15 +2,15 @@ import Ajv from 'ajv';
 import { createHash } from 'crypto';
 import { Shield } from '../shield';
 import { requestSchema, operationRequirements } from './schema';
-import type { 
-  JsonRequest, 
-  JsonResponse, 
+import type {
+  JsonRequest,
+  JsonResponse,
   JsonSuccessResponse,
   JsonErrorResponse,
-  ValidateResult, 
-  IsSupportedResult, 
+  ValidateResult,
+  IsSupportedResult,
   GetSupportedYieldIdsResult,
-  ErrorCode 
+  ErrorCode,
 } from './types';
 
 // SECURITY: Pre-compiled schema validator (prevents ReDoS on repeated calls)
@@ -33,7 +33,7 @@ function computeRequestHash(input: string): string {
 
 /**
  * Main entry point for JSON interface.
- * 
+ *
  * SECURITY GUARANTEES:
  * 1. Input is validated against strict JSON schema before processing
  * 2. All responses include request hash for integrity verification
@@ -43,14 +43,16 @@ function computeRequestHash(input: string): string {
  */
 export function handleJsonRequest(jsonInput: string): string {
   const requestHash = computeRequestHash(jsonInput);
-  
+
   // SECURITY: Check input size before parsing
   if (jsonInput.length > MAX_INPUT_SIZE) {
-    return JSON.stringify(errorResponse(
-      'SCHEMA_VALIDATION_ERROR',
-      `Input exceeds maximum size of ${MAX_INPUT_SIZE} bytes`,
-      requestHash
-    ));
+    return JSON.stringify(
+      errorResponse(
+        'SCHEMA_VALIDATION_ERROR',
+        `Input exceeds maximum size of ${MAX_INPUT_SIZE} bytes`,
+        requestHash,
+      ),
+    );
   }
 
   // Step 1: Parse JSON
@@ -58,22 +60,23 @@ export function handleJsonRequest(jsonInput: string): string {
   try {
     request = JSON.parse(jsonInput);
   } catch (e) {
-    return JSON.stringify(errorResponse(
-      'PARSE_ERROR',
-      'Invalid JSON syntax',
-      requestHash,
-      { parseError: e instanceof Error ? e.message : String(e) }
-    ));
+    return JSON.stringify(
+      errorResponse('PARSE_ERROR', 'Invalid JSON syntax', requestHash, {
+        parseError: e instanceof Error ? e.message : String(e),
+      }),
+    );
   }
 
   // Step 2: Validate against schema (SECURITY: strict validation)
   if (!validateSchema(request)) {
-    return JSON.stringify(errorResponse(
-      'SCHEMA_VALIDATION_ERROR',
-      'Request does not match expected schema',
-      requestHash,
-      { validationErrors: validateSchema.errors }
-    ));
+    return JSON.stringify(
+      errorResponse(
+        'SCHEMA_VALIDATION_ERROR',
+        'Request does not match expected schema',
+        requestHash,
+        { validationErrors: validateSchema.errors },
+      ),
+    );
   }
 
   const validRequest = request as unknown as JsonRequest;
@@ -81,12 +84,17 @@ export function handleJsonRequest(jsonInput: string): string {
   // Step 3: Check operation-specific required fields
   const requiredFields = operationRequirements[validRequest.operation];
   for (const field of requiredFields) {
-    if (!(field in validRequest) || validRequest[field as keyof JsonRequest] === undefined) {
-      return JSON.stringify(errorResponse(
-        'MISSING_REQUIRED_FIELD',
-        `Operation '${validRequest.operation}' requires field '${field}'`,
-        requestHash
-      ));
+    if (
+      !(field in validRequest) ||
+      validRequest[field as keyof JsonRequest] === undefined
+    ) {
+      return JSON.stringify(
+        errorResponse(
+          'MISSING_REQUIRED_FIELD',
+          `Operation '${validRequest.operation}' requires field '${field}'`,
+          requestHash,
+        ),
+      );
     }
   }
 
@@ -102,15 +110,20 @@ export function handleJsonRequest(jsonInput: string): string {
     }
   } catch (e) {
     // SECURITY: Never expose internal error details in production
-    return JSON.stringify(errorResponse(
-      'INTERNAL_ERROR',
-      'An unexpected error occurred',
-      requestHash
-    ));
+    return JSON.stringify(
+      errorResponse(
+        'INTERNAL_ERROR',
+        'An unexpected error occurred',
+        requestHash,
+      ),
+    );
   }
 }
 
-function handleValidate(request: JsonRequest, requestHash: string): JsonResponse<ValidateResult> {
+function handleValidate(
+  request: JsonRequest,
+  requestHash: string,
+): JsonResponse<ValidateResult> {
   const result = shield.validate({
     yieldId: request.yieldId!,
     unsignedTransaction: request.unsignedTransaction!,
@@ -119,47 +132,64 @@ function handleValidate(request: JsonRequest, requestHash: string): JsonResponse
     context: request.context,
   });
 
-  return successResponse({
-    isValid: result.isValid,
-    reason: result.reason,
-    details: result.details,
-    detectedType: result.detectedType,
-  }, requestHash);
+  return successResponse(
+    {
+      isValid: result.isValid,
+      reason: result.reason,
+      details: result.details,
+      detectedType: result.detectedType,
+    },
+    requestHash,
+  );
 }
 
-function handleIsSupported(request: JsonRequest, requestHash: string): JsonResponse<IsSupportedResult> {
-  return successResponse({
-    supported: shield.isSupported(request.yieldId!),
-    yieldId: request.yieldId!,
-  }, requestHash);
+function handleIsSupported(
+  request: JsonRequest,
+  requestHash: string,
+): JsonResponse<IsSupportedResult> {
+  return successResponse(
+    {
+      supported: shield.isSupported(request.yieldId!),
+      yieldId: request.yieldId!,
+    },
+    requestHash,
+  );
 }
 
-function handleGetSupportedYieldIds(requestHash: string): JsonResponse<GetSupportedYieldIdsResult> {
-  return successResponse({
-    yieldIds: shield.getSupportedYieldIds(),
-  }, requestHash);
+function handleGetSupportedYieldIds(
+  requestHash: string,
+): JsonResponse<GetSupportedYieldIdsResult> {
+  return successResponse(
+    {
+      yieldIds: shield.getSupportedYieldIds(),
+    },
+    requestHash,
+  );
 }
 
 // Helper functions for consistent response formatting
-function successResponse<T>(result: T, requestHash: string): JsonSuccessResponse<T> {
+function successResponse<T>(
+  result: T,
+  requestHash: string,
+): JsonSuccessResponse<T> {
   return {
     ok: true,
     apiVersion: '1.0',
     result,
-    meta: { requestHash }
+    meta: { requestHash },
   };
 }
 
 function errorResponse(
-  code: ErrorCode, 
-  message: string, 
+  code: ErrorCode,
+  message: string,
   requestHash: string,
-  details?: unknown
+  details?: unknown,
 ): JsonErrorResponse {
   return {
     ok: false,
     apiVersion: '1.0',
     error: { code, message, details },
-    meta: { requestHash }
+    meta: { requestHash },
   };
 }

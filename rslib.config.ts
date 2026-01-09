@@ -24,7 +24,7 @@ export default defineConfig({
         entry: {
           cli: path.join(__dirname, 'src', 'cli.ts'),
         },
-      }
+      },
     },
   ],
   source: {

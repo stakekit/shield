@@ -6,9 +6,9 @@ const MAX_INPUT_SIZE = 100 * 1024; // 100KB
 async function readStdin(): Promise<string> {
   return new Promise((resolve, reject) => {
     let data = '';
-    
+
     process.stdin.setEncoding('utf8');
-    
+
     process.stdin.on('data', (chunk) => {
       data += chunk;
       // SECURITY: Enforce size limit during streaming
@@ -16,7 +16,7 @@ async function readStdin(): Promise<string> {
         reject(new Error('Input exceeds maximum size'));
       }
     });
-    
+
     process.stdin.on('end', () => resolve(data));
     process.stdin.on('error', reject);
   });
@@ -35,9 +35,9 @@ async function main(): Promise<void> {
       apiVersion: '1.0',
       error: {
         code: 'INTERNAL_ERROR',
-        message: 'Failed to process request'
+        message: 'Failed to process request',
       },
-      meta: { requestHash: 'unavailable' }
+      meta: { requestHash: 'unavailable' },
     };
     process.stdout.write(JSON.stringify(errorResponse) + '\n');
     process.exit(1);

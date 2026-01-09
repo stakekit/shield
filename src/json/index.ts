@@ -1,11 +1,11 @@
 export { handleJsonRequest } from './handler';
-export type { 
-  JsonRequest, 
-  JsonResponse, 
-  JsonSuccessResponse, 
+export type {
+  JsonRequest,
+  JsonResponse,
+  JsonSuccessResponse,
   JsonErrorResponse,
   ValidateResult,
   IsSupportedResult,
   GetSupportedYieldIdsResult,
-  ErrorCode 
+  ErrorCode,
 } from './types';
