@@ -188,48 +188,48 @@ describe('handleJsonRequest', () => {
     });
 
     it('should forward context parameter to Shield validator', () => {
-    const response = call({
+      const response = call({
         apiVersion: '1.0',
         operation: 'validate',
         yieldId: 'ethereum-eth-lido-staking',
         unsignedTransaction: JSON.stringify(validLidoStakeTx),
         userAddress: userAddress,
         context: {
-        feeConfiguration: [
+          feeConfiguration: [
             {
-            depositFeeBps: 100,
-            feeRecipientAddress: '0x1234567890123456789012345678901234567890',
+              depositFeeBps: 100,
+              feeRecipientAddress: '0x1234567890123456789012345678901234567890',
             },
-        ],
+          ],
         },
-    });
+      });
 
-    expect(response.ok).toBe(true);
-    expect(response.result.isValid).toBe(true);
+      expect(response.ok).toBe(true);
+      expect(response.result.isValid).toBe(true);
     });
 
     it('should forward both args and context parameters together', () => {
-    const response = call({
+      const response = call({
         apiVersion: '1.0',
         operation: 'validate',
         yieldId: 'ethereum-eth-lido-staking',
         unsignedTransaction: JSON.stringify(validLidoStakeTx),
         userAddress: userAddress,
         args: {
-        amount: '1000000000000000000',
+          amount: '1000000000000000000',
         },
         context: {
-        feeConfiguration: [
+          feeConfiguration: [
             {
-            depositFeeBps: 50,
-            feeRecipientAddress: '0x1234567890123456789012345678901234567890',
+              depositFeeBps: 50,
+              feeRecipientAddress: '0x1234567890123456789012345678901234567890',
             },
-        ],
+          ],
         },
-    });
+      });
 
-    expect(response.ok).toBe(true);
-    expect(response.result.isValid).toBe(true);
+      expect(response.ok).toBe(true);
+      expect(response.result.isValid).toBe(true);
     });
   });
 
