@@ -18,6 +18,9 @@
   "publishConfig": {
     "access": "public"
   },
+  "bin": {
+    "shield": "./dist/cli.js"
+  },
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
