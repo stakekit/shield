@@ -5,19 +5,25 @@ const MAX_INPUT_SIZE = 100 * 1024; // 100KB
 
 async function readStdin(): Promise<string> {
   return new Promise((resolve, reject) => {
-    let data = '';
+    const chunks: Buffer[] = [];
+    let totalBytes = 0;
 
-    process.stdin.setEncoding('utf8');
-
-    process.stdin.on('data', (chunk) => {
-      data += chunk;
+    // Don't set encoding - keep as Buffer for accurate byte counting
+    process.stdin.on('data', (chunk: Buffer) => {
+      totalBytes += chunk.length; // Buffer.length is actual bytes
       // SECURITY: Enforce size limit during streaming
-      if (data.length > MAX_INPUT_SIZE) {
+      if (totalBytes > MAX_INPUT_SIZE) {
         reject(new Error('Input exceeds maximum size'));
+        return;
       }
+      chunks.push(chunk);
     });
 
-    process.stdin.on('end', () => resolve(data));
+    process.stdin.on('end', () => {
+      const data = Buffer.concat(chunks).toString('utf8');
+      resolve(data);
+    });
+
     process.stdin.on('error', reject);
   });
 }
