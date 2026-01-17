@@ -12,9 +12,35 @@
 
 ## Installation
 
+### For TypeScript/JavaScript Projects
+
 ```bash
 npm install @yieldxyz/shield
 ```
+
+### For Other Languages (Standalone Binary)
+
+Download the pre-built binary for your platform from [GitHub Releases](https://github.com/stakekit/shield/releases):
+
+| Platform              | Download                 |
+| --------------------- | ------------------------ |
+| Linux (x64)           | `shield-linux-x64`       |
+| macOS (Apple Silicon) | `shield-darwin-arm64`    |
+| macOS (Intel)         | `shield-darwin-x64`      |
+| Windows               | `shield-windows-x64.exe` |
+
+```bash
+# Example: Download for macOS Apple Silicon
+curl -L https://github.com/stakekit/shield/releases/latest/download/shield-darwin-arm64 -o shield
+chmod +x shield
+
+# Verify integrity (recommended)
+curl -LO https://github.com/stakekit/shield/releases/latest/download/shield-darwin-arm64.sha256
+shasum -a 256 -c shield-darwin-arm64.sha256
+# Expected output: shield-darwin-arm64: OK
+```
+
+See the [examples/](./examples/) directory for complete integration examples in Python, Go, and Rust.
 
 ## Usage
 
@@ -124,105 +150,6 @@ echo '{"apiVersion":"1.0","operation":"isSupported","yieldId":"ethereum-eth-lido
 echo '{"apiVersion":"1.0","operation":"validate","yieldId":"ethereum-eth-lido-staking","unsignedTransaction":"{...}","userAddress":"0x..."}' | npx @yieldxyz/shield
 ```
 
-### Python Example
-
-```python
-import subprocess
-import json
-
-def validate_transaction(yield_id: str, unsigned_tx: str, user_address: str) -> dict:
-    request = {
-        "apiVersion": "1.0",
-        "operation": "validate",
-        "yieldId": yield_id,
-        "unsignedTransaction": unsigned_tx,
-        "userAddress": user_address
-    }
-
-    result = subprocess.run(
-        ["npx", "@yieldxyz/shield"],
-        input=json.dumps(request),
-        capture_output=True,
-        text=True
-    )
-
-    return json.loads(result.stdout)
-
-# Usage
-response = validate_transaction(
-    "ethereum-eth-lido-staking",
-    '{"to":"0xae7ab96520DE3A18E5e111B5EaAb095312D7fE84",...}',
-    "0x742d35cc6634c0532925a3b844bc9e7595f0beb8"
-)
-
-if response["ok"] and response["result"]["isValid"]:
-    print("Transaction is valid!")
-else:
-    print(f"Blocked: {response['result'].get('reason')}")
-```
-
-### Go Example
-
-```go
-package main
-
-import (
-    "bytes"
-    "encoding/json"
-    "os/exec"
-)
-
-func validateTransaction(yieldId, unsignedTx, userAddress string) (bool, error) {
-    request := map[string]string{
-        "apiVersion":          "1.0",
-        "operation":           "validate",
-        "yieldId":             yieldId,
-        "unsignedTransaction": unsignedTx,
-        "userAddress":         userAddress,
-    }
-
-    input, _ := json.Marshal(request)
-
-    cmd := exec.Command("npx", "@yieldxyz/shield")
-    cmd.Stdin = bytes.NewReader(input)
-
-    output, err := cmd.Output()
-    if err != nil {
-        return false, err
-    }
-
-    var resp struct {
-        Ok     bool `json:"ok"`
-        Result struct {
-            IsValid bool `json:"isValid"`
-        } `json:"result"`
-    }
-    json.Unmarshal(output, &resp)
-
-    return resp.Ok && resp.Result.IsValid, nil
-}
-```
-
-### Ruby Example
-
-```ruby
-require 'json'
-require 'open3'
-
-def validate_transaction(yield_id, unsigned_tx, user_address)
-  request = {
-    apiVersion: "1.0",
-    operation: "validate",
-    yieldId: yield_id,
-    unsignedTransaction: unsigned_tx,
-    userAddress: user_address
-  }
-
-  stdout, _status = Open3.capture2("npx @yieldxyz/shield", stdin_data: request.to_json)
-  JSON.parse(stdout)
-end
-```
-
 ## Supported Yield IDs
 
 - `ethereum-eth-lido-staking`
@@ -274,6 +201,29 @@ Common validation failures:
 - `"Withdrawal owner does not match user address"` - Ownership mismatch
 - `"Transaction validation failed: No matching operation pattern found"` - Transaction doesn't match any supported pattern
 - `"Transaction validation failed: Ambiguous transaction pattern detected"` - Transaction matches multiple patterns
+
+## Security
+
+Shield is designed with security as a top priority:
+
+- **Input Validation**: All inputs are validated against strict JSON schemas with size limits (100KB max)
+- **Pattern Matching**: Transactions must match exactly one known pattern to be valid
+- **No Network Access**: The CLI binary has no network capabilities - it only reads stdin and writes stdout
+- **Checksum Verification**: All release binaries include SHA256 checksums for integrity verification
+
+### Verifying Binary Integrity
+
+Always verify downloaded binaries:
+
+```bash
+# Download binary and checksum
+curl -LO https://github.com/stakekit/shield/releases/latest/download/shield-darwin-arm64
+curl -LO https://github.com/stakekit/shield/releases/latest/download/shield-darwin-arm64.sha256
+
+# Verify
+shasum -a 256 -c shield-darwin-arm64.sha256
+# Expected: shield-darwin-arm64: OK
+```
 
 ## License
 
