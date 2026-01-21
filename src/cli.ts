@@ -1,7 +1,5 @@
 #!/usr/bin/env node
-import { handleJsonRequest } from './json';
-
-const MAX_INPUT_SIZE = 100 * 1024; // 100KB
+import { handleJsonRequest, MAX_INPUT_SIZE } from './json';
 
 async function readStdin(): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -46,6 +44,7 @@ async function main(): Promise<void> {
       meta: { requestHash: 'unavailable' },
     };
     process.stdout.write(JSON.stringify(errorResponse) + '\n');
+    process.stdin.destroy();
     process.exit(1);
   }
 }

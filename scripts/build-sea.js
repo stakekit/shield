@@ -1,7 +1,6 @@
 const { execSync } = require('child_process');
 const fs = require('fs');
 const os = require('os');
-const path = require('path');
 
 const platform = os.platform();
 const arch = os.arch();
