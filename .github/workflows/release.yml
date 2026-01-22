@@ -4,37 +4,44 @@ on:
   release:
     types: [published]
 
+# SECURITY: Limit permissions at workflow level
+permissions:
+  contents: read
+
 jobs:
+  # ==========================================
+  # Job 1: Publish to NPM
+  # ==========================================
   publish:
     name: Publish to NPM
     runs-on: ubuntu-latest
     environment: production
     permissions:
       contents: read
-      id-token: write 
-    
+      id-token: write
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
-          ref: main 
-      
+          ref: main
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 20.17.0
           registry-url: 'https://registry.npmjs.org'
-      
+
       - name: Install pnpm
         uses: pnpm/action-setup@v2
         with:
           version: 10.12.2
-      
+
       - name: Get pnpm store directory
         shell: bash
         run: |
           echo "STORE_PATH=$(pnpm store path --silent)" >> $GITHUB_ENV
-      
+
       - name: Setup pnpm cache
         uses: actions/cache@v3
         with:
@@ -42,17 +49,131 @@ jobs:
           key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
           restore-keys: |
             ${{ runner.os }}-pnpm-store-
-      
+
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
-      
+
       - name: Run tests
         run: pnpm test
-      
+
       - name: Build package
         run: pnpm run build
-      
+
       - name: Publish to NPM
         run: pnpm publish --access public --no-git-checks --provenance
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+  # ==========================================
+  # Job 2: Build binaries for all platforms
+  # ==========================================
+  build-binaries:
+    name: Build Binary (${{ matrix.platform }}-${{ matrix.arch }})
+    runs-on: ${{ matrix.os }}
+    # SECURITY: Only grant write permission where needed
+    permissions:
+      contents: write
+      attestations: write  # SECURITY: For artifact attestation
+      id-token: write      # SECURITY: For OIDC signing
+
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            platform: linux
+            arch: x64
+          - os: macos-latest
+            platform: darwin
+            arch: arm64
+          - os: macos-13
+            platform: darwin
+            arch: x64
+          - os: windows-latest
+            platform: win32
+            arch: x64
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: 10.12.2
+
+      - name: Get pnpm store directory
+        shell: bash
+        run: |
+          echo "STORE_PATH=$(pnpm store path --silent)" >> $GITHUB_ENV
+
+      - name: Setup pnpm cache
+        uses: actions/cache@v3
+        with:
+          path: ${{ env.STORE_PATH }}
+          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-pnpm-store-
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # SECURITY: Run audit before building
+      - name: Security audit
+        run: pnpm audit --audit-level=high
+        continue-on-error: true
+
+      - name: Build TypeScript
+        run: pnpm build
+
+      - name: Bundle CLI for SEA
+        run: pnpm build:cli:bundle
+
+      - name: Prepare SEA blob
+        run: pnpm build:sea:prepare
+
+      - name: Build binary
+        run: pnpm build:sea
+
+      - name: Rename binary (Unix)
+        if: matrix.platform != 'win32'
+        run: mv shield-${{ matrix.platform }}-* shield-${{ matrix.platform }}-${{ matrix.arch }}
+
+      - name: Rename binary (Windows)
+        if: matrix.platform == 'win32'
+        shell: bash
+        run: mv shield.exe shield-windows-${{ matrix.arch }}.exe
+
+      # SECURITY: Generate SHA256 checksum for integrity verification
+      - name: Generate checksum (Unix)
+        if: matrix.platform != 'win32'
+        run: |
+          shasum -a 256 shield-${{ matrix.platform }}-${{ matrix.arch }} > shield-${{ matrix.platform }}-${{ matrix.arch }}.sha256
+          cat shield-${{ matrix.platform }}-${{ matrix.arch }}.sha256
+
+      - name: Generate checksum (Windows)
+        if: matrix.platform == 'win32'
+        shell: pwsh
+        run: |
+          $hash = Get-FileHash -Algorithm SHA256 shield-windows-${{ matrix.arch }}.exe
+          "$($hash.Hash.ToLower())  shield-windows-${{ matrix.arch }}.exe" | Out-File -Encoding utf8 shield-windows-${{ matrix.arch }}.exe.sha256
+          Get-Content shield-windows-${{ matrix.arch }}.exe.sha256
+
+      # SECURITY: Generate artifact attestation (proves binary was built by this workflow)
+      - name: Generate artifact attestation
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: 'shield-*'
+
+      - name: Upload binary and checksum to Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            shield-${{ matrix.platform }}-${{ matrix.arch }}${{ matrix.platform == 'win32' && '.exe' || '' }}
+            shield-${{ matrix.platform }}-${{ matrix.arch }}${{ matrix.platform == 'win32' && '.exe' || '' }}.sha256
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
