@@ -16,7 +16,8 @@
   "license": "MIT",
   "author": "Yield.xyz",
   "publishConfig": {
-    "access": "public"
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
   },
   "bin": {
     "shield": "./dist/cli.js"
