@@ -1,5 +1,8 @@
 #!/bin/bash
 
+# Shield Demo Script
+# Run from repository root: ./scripts/demo-validation.sh
+
 echo ""
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo "  SHIELD: Transaction Validation Demo"
@@ -46,6 +49,12 @@ echo "Attempting to validate a transaction with wrong contract address..."
 echo ""
 sleep 2
 
+# Transaction points to 0x000...000 instead of Lido contract (0xae7ab96520DE3A18E5e111B5EaAb095312D7fE84)
+# Shield should reject this as invalid
+echo '$ echo {"operation":"validate","yieldId":"ethereum-eth-lido-staking","unsignedTransaction":"{...wrong address...}"} | ./shield-darwin-x64'
+echo ""
+sleep 1
+
 echo '{"apiVersion":"1.0","operation":"validate","yieldId":"ethereum-eth-lido-staking","unsignedTransaction":"{\"to\":\"0x0000000000000000000000000000000000000000\",\"data\":\"0x\",\"value\":\"0x1\"}","userAddress":"0x742d35cc6634c0532925a3b844bc9e7595f0beb8"}' | ./shield-darwin-x64 | python3 -m json.tool
 
 echo ""
@@ -61,6 +70,12 @@ echo "Attempting to validate with an unsupported yield ID..."
 echo ""
 sleep 2
 
+# "fake-yield-id" is not in the supported list
+# Shield should reject with UNSUPPORTED_YIELD error
+echo '$ echo {"operation":"validate","yieldId":"fake-yield-id","unsignedTransaction":"{}","userAddress":"0x123"} | ./shield-darwin-x64'
+echo ""
+sleep 1
+
 echo '{"apiVersion":"1.0","operation":"validate","yieldId":"fake-yield-id","unsignedTransaction":"{}","userAddress":"0x123"}' | ./shield-darwin-x64 | python3 -m json.tool
 
 echo ""
@@ -72,11 +87,20 @@ echo "━━━━━━━━━━━━━━━━━━━━━━━━�
 echo "  5. Python Integration Example"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo ""
-echo "Shield works from any language. Here's Python:"
+echo "Shield works from any language via JSON stdin/stdout."
+echo "No Node.js required - just spawn the binary as a subprocess."
 echo ""
+echo "The Python example:"
+echo "  1. Spawns the Shield binary"
+echo "  2. Sends JSON request via stdin"
+echo "  3. Reads JSON response from stdout"
+echo "  4. Parses and displays the result"
+echo ""
+sleep 3
+
 echo "$ python3 examples/python/shield_example.py"
 echo ""
-sleep 2
+sleep 1
 
 cp ./shield-darwin-x64 examples/python/shield
 cd examples/python
