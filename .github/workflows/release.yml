@@ -128,10 +128,6 @@ jobs:
       - name: Build binary
         run: pnpm build:sea
 
-      - name: Rename binary (Unix)
-        if: matrix.platform != 'win32'
-        run: mv shield-${{ matrix.platform }}-* shield-${{ matrix.platform }}-${{ matrix.arch }}
-
       - name: Rename binary (Windows)
         if: matrix.platform == 'win32'
         shell: bash
