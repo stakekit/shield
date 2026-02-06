@@ -62,7 +62,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     # SECURITY: Only grant write permission where needed
     permissions:
-      contents: write
+      contents: read
       attestations: write # SECURITY: For artifact attestation
       id-token: write # SECURITY: For OIDC signing
 
@@ -164,11 +164,37 @@ jobs:
         with:
           subject-path: "shield-*"
 
-      - name: Upload binary and checksum to Release
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: binary-${{ matrix.platform }}-${{ matrix.arch }}
+          path: |
+            shield-${{ matrix.platform == 'win32' && 'windows' || matrix.platform }}-${{ matrix.arch }}${{ matrix.platform == 'win32' && '.exe' || '' }}
+            shield-${{ matrix.platform == 'win32' && 'windows' || matrix.platform }}-${{ matrix.arch }}${{ matrix.platform == 'win32' && '.exe' || '' }}.sha256
+
+  # ==========================================
+  # Job 3: Create GitHub Release with all binaries
+  # ==========================================
+  create-release:
+    name: Create GitHub Release
+    needs: build-binaries
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: binary-*
+          merge-multiple: true
+
+      - name: List release files
+        run: ls -la shield-*
+
+      - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
-          files: |
-            shield-${{ matrix.platform }}-${{ matrix.arch }}${{ matrix.platform == 'win32' && '.exe' || '' }}
-            shield-${{ matrix.platform }}-${{ matrix.arch }}${{ matrix.platform == 'win32' && '.exe' || '' }}.sha256
+          files: shield-*
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
