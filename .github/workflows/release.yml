@@ -169,11 +169,6 @@ jobs:
         with:
           name: binary-${{ matrix.platform }}-${{ matrix.arch }}
           path: |
-      - name: Upload artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: binary-${{ matrix.platform }}-${{ matrix.arch }}
-          path: |
             shield-${{ matrix.platform == 'win32' && 'windows' || matrix.platform }}-${{ matrix.arch }}${{ matrix.platform == 'win32' && '.exe' || '' }}
             shield-${{ matrix.platform == 'win32' && 'windows' || matrix.platform }}-${{ matrix.arch }}${{ matrix.platform == 'win32' && '.exe' || '' }}.sha256
 
