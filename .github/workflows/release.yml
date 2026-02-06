@@ -88,10 +88,17 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Setup Node.js
+        if: ${{ !matrix.node_arch }}
         uses: actions/setup-node@v4
         with:
           node-version: "22"
-          architecture: ${{ matrix.node_arch || '' }}
+
+      - name: Setup Node.js (x64 via Rosetta)
+        if: ${{ matrix.node_arch }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          architecture: ${{ matrix.node_arch }}
 
       - name: Install pnpm
         uses: pnpm/action-setup@v2
