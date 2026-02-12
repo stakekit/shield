@@ -15,6 +15,17 @@ export default defineConfig({
         },
       },
     },
+    // CLI build (no .d.ts needed)
+    {
+      format: 'cjs',
+      syntax: ['es2022'],
+      dts: false,
+      source: {
+        entry: {
+          cli: path.join(__dirname, 'src', 'cli.ts'),
+        },
+      },
+    },
   ],
   source: {
     tsconfigPath: path.join(__dirname, 'tsconfig.build.json'),

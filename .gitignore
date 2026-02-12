@@ -45,3 +45,15 @@ coverage/
 *.temp
 .tmp/
 .temp/
+
+# SEA build artifacts
+sea-prep.blob
+shield-*
+shield.exe
+dist/cli.bundled.js
+
+# Example build artifacts
+examples/rust/target/
+examples/rust/Cargo.lock
+examples/*/shield
+examples/*/shield.exe
