@@ -36,9 +36,6 @@ const WETH_ABI = [
 /**
  * Generic ERC4626 Validator
  * 
- * Validates transactions for all ERC4626 vaults including:
- * - Euler, Morpho, Sommelier, Fluid, Gearbox, Angle, Idle, YO Protocol, 
- *   Yearn, Maple, Sky Protocol
  * 
  * Transaction Types Validated:
  * - APPROVAL: ERC20 token approval before deposit
@@ -52,7 +49,7 @@ export class ERC4626Validator extends BaseEVMValidator {
   private readonly erc20Interface: ethers.Interface;
   private readonly wethInterface: ethers.Interface;
   private vaultsByChain: Map<number, Set<string>>; // chainId -> Set of vault addresses
-  private vaultInfoMap: Map<string, VaultInfo>;    // vaultAddress -> VaultInfo
+  private vaultInfoMap: Map<string, VaultInfo>;    // "chainId:address" -> VaultInfo
   
   constructor(vaultConfig: VaultConfiguration) {
     super();
@@ -67,12 +64,7 @@ export class ERC4626Validator extends BaseEVMValidator {
   /**
    * Load vault configuration
    * 
-   * Purpose:
-   * 1. Vault Whitelisting - Only allow transactions to approved vaults
-   * 2. Fast Lookup - O(1) lookup by chain ID and address
-   * 3. Vault Metadata - Store vault-specific info (WETH vault, input token, etc.)
-   * 4. Security - Core security feature preventing malicious contract calls
-   */
+  */
   private loadConfiguration(config: VaultConfiguration): void {
     for (const vault of config.vaults) {
       const chainId = vault.chainId;
@@ -85,17 +77,17 @@ export class ERC4626Validator extends BaseEVMValidator {
       this.vaultsByChain.get(chainId)!.add(address);
       
       // Add to info map
-      this.vaultInfoMap.set(address, vault);
+      this.vaultInfoMap.set(`${chainId}:${address}`, vault);
     }
   }
 
   getSupportedTransactionTypes(): TransactionType[] {
     return [
-      TransactionType.APPROVAL,   // ERC20 approve before deposit
-      TransactionType.WRAP,       // ETH → WETH (optional)
-      TransactionType.SUPPLY,     // Deposit into vault
-      TransactionType.WITHDRAW,   // Withdraw from vault
-      TransactionType.UNWRAP,     // WETH → ETH (optional)
+      TransactionType.APPROVAL,   
+      TransactionType.WRAP,       
+      TransactionType.SUPPLY,     
+      TransactionType.WITHDRAW,   
+      TransactionType.UNWRAP,     
     ];
   }
 
@@ -126,39 +118,9 @@ export class ERC4626Validator extends BaseEVMValidator {
       return this.blocked('Chain ID not found in transaction');
     }
 
-    // Validate vault address is whitelisted
-    const vaultAddress = tx.to?.toLowerCase();
-    if (!vaultAddress) {
+    // Ensure destination address exists
+    if (!tx.to) {
       return this.blocked('Transaction has no destination address');
-    }
-
-    if (!this.isVaultAllowed(chainId, vaultAddress)) {
-      return this.blocked('Vault address not whitelisted', {
-        vaultAddress,
-        chainId,
-      });
-    }
-
-    // Get vault info
-    const vaultInfo = this.vaultInfoMap.get(vaultAddress);
-    if (!vaultInfo) {
-      return this.blocked('Vault info not found', { vaultAddress });
-    }
-
-    // Validate no value sent (unless WETH vault)
-    const value = BigInt(tx.value ?? '0');
-    if (value > 0n && !vaultInfo.isWethVault) {
-      return this.blocked('Transaction should not send ETH to non-WETH vault', {
-        value: value.toString(),
-      });
-    }
-
-    if (vaultInfo.chainId !== chainId) {
-      return this.blocked('Transaction chain ID does not match vault chain', {
-        expectedChainId: vaultInfo.chainId,
-        actualChainId: chainId,
-        vaultAddress,
-      });
     }
 
     // Route to appropriate validation based on transaction type
@@ -179,21 +141,9 @@ export class ERC4626Validator extends BaseEVMValidator {
         });
     }
   }
-
  
   /**
    * Validate APPROVAL transaction
-   * 
-   * Sample transaction from analysis:
-   * {
-   *   "to": "0x82aF49447D8a07e3bd95BD0d56f35241523fBab1",  // WETH token
-   *   "data": "0x095ea7b3...",  // approve(spender, amount)
-   * }
-   * 
-   * Validates:
-   * 1. Function is approve(address spender, uint256 amount)
-   * 2. Spender is a whitelisted vault address
-   * 3. No ETH value sent
    */
   private validateApproval(
     tx: EVMTransaction,
@@ -233,8 +183,16 @@ export class ERC4626Validator extends BaseEVMValidator {
       });
     }
 
-    // Validate amount is reasonable (not max uint256 unless explicitly allowed)
-    // This is a safety check - some protocols use max approval, others use exact amounts
+    // After confirming spender is a whitelisted vault, verify tx.to is the vault's input token
+    const vaultInfo = this.vaultInfoMap.get(`${chainId}:${spender.toLowerCase()}`);
+    if (vaultInfo && tx.to?.toLowerCase() !== vaultInfo.inputTokenAddress) {
+      return this.blocked('Approval token does not match vault input token', {
+        expected: vaultInfo.inputTokenAddress,
+        actual: tx.to,
+      });
+    }
+
+    // Validate amount is not zero
     const amountBigInt = BigInt(amount);
     if (amountBigInt === 0n) {
       return this.blocked('Approval amount is zero');
@@ -245,18 +203,6 @@ export class ERC4626Validator extends BaseEVMValidator {
 
   /**
    * Validate WRAP transaction (ETH → WETH)
-   * 
-   * Sample transaction from analysis:
-   * {
-   *   "to": "0x82aF49447D8a07e3bd95BD0d56f35241523fBab1",  // WETH contract
-   *   "data": "0xd0e30db0",  // deposit()
-   *   "value": "0x2386f26fc10000"  // ETH amount
-   * }
-   * 
-   * Validates:
-   * 1. Transaction is to WETH contract
-   * 2. Function is deposit()
-   * 3. ETH value is sent
    */
   private validateWrap(
     tx: EVMTransaction,
@@ -301,18 +247,6 @@ export class ERC4626Validator extends BaseEVMValidator {
 
   /**
    * Validate SUPPLY transaction (deposit/mint)
-   * 
-   * Sample transaction from analysis:
-   * {
-   *   "to": "0x78E3E051D32157AACD550fBB78458762d8f7edFF",  // Vault address
-   *   "data": "0x6e553f65...",  // deposit(uint256 assets, address receiver)
-   * }
-   * 
-   * Validates:
-   * 1. Transaction is to whitelisted vault
-   * 2. Function is deposit() or mint()
-   * 3. Receiver is the user
-   * 4. No ETH value sent (unless WETH vault with native ETH support)
    */
   private validateSupply(
     tx: EVMTransaction,
@@ -332,10 +266,27 @@ export class ERC4626Validator extends BaseEVMValidator {
       });
     }
 
-    // Get vault info
-    const vaultInfo = this.vaultInfoMap.get(vaultAddress);
+    // Get vault info (keyed by chainId:address)
+    const vaultInfo = this.vaultInfoMap.get(`${chainId}:${vaultAddress}`);
     if (!vaultInfo) {
       return this.blocked('Vault info not found', { vaultAddress });
+    }
+
+    // Verify chain ID matches vault's registered chain
+    if (vaultInfo.chainId !== chainId) {
+      return this.blocked('Transaction chain ID does not match vault chain', {
+        expectedChainId: vaultInfo.chainId,
+        actualChainId: chainId,
+        vaultAddress,
+      });
+    }
+
+    // Check if vault deposits are paused
+    if (vaultInfo.canEnter === false) {
+      return this.blocked('Vault deposits are currently paused', {
+        vaultAddress,
+        chainId,
+      });
     }
 
     // Validate no value sent (unless WETH vault - rare case)
@@ -374,21 +325,9 @@ export class ERC4626Validator extends BaseEVMValidator {
     return this.safe();
   }
 
+
   /**
    * Validate WITHDRAW transaction (withdraw/redeem)
-   * 
-   * Sample transaction from analysis:
-   * {
-   *   "to": "0x78E3E051D32157AACD550fBB78458762d8f7edFF",  // Vault address
-   *   "data": "0xba087652...",  // withdraw(uint256 assets, address receiver, address owner)
-   * }
-   * 
-   * Validates:
-   * 1. Transaction is to whitelisted vault
-   * 2. Function is withdraw() or redeem()
-   * 3. Owner is the user (they must own the shares)
-   * 4. Receiver is the user (for safety)
-   * 5. No ETH value sent
    */
   private validateWithdraw(
     tx: EVMTransaction,
@@ -403,6 +342,29 @@ export class ERC4626Validator extends BaseEVMValidator {
 
     if (!this.isVaultAllowed(chainId, vaultAddress)) {
       return this.blocked('Vault address not whitelisted', {
+        vaultAddress,
+        chainId,
+      });
+    }
+
+    // Get vault info (keyed by chainId:address)
+    const vaultInfo = this.vaultInfoMap.get(`${chainId}:${vaultAddress}`);
+    if (!vaultInfo) {
+      return this.blocked('Vault info not found', { vaultAddress });
+    }
+
+    // Verify chain ID matches vault's registered chain
+    if (vaultInfo.chainId !== chainId) {
+      return this.blocked('Transaction chain ID does not match vault chain', {
+        expectedChainId: vaultInfo.chainId,
+        actualChainId: chainId,
+        vaultAddress,
+      });
+    }
+
+    // Check if vault withdrawals are disabled
+    if (vaultInfo.canExit === false) {
+      return this.blocked('Vault withdrawals are currently disabled', {
         vaultAddress,
         chainId,
       });
@@ -452,19 +414,9 @@ export class ERC4626Validator extends BaseEVMValidator {
     return this.safe();
   }
 
+
   /**
-   * Validate UNWRAP transaction (WETH → ETH)
-   * 
-   * Sample transaction from analysis:
-   * {
-   *   "to": "0x82aF49447D8a07e3bd95BD0d56f35241523fBab1",  // WETH contract
-   *   "data": "0x2e1a7d4d...",  // withdraw(uint256 wad)
-   * }
-   * 
-   * Validates:
-   * 1. Transaction is to WETH contract
-   * 2. Function is withdraw(uint256)
-   * 3. No ETH value sent
+   * Validate UNWRAP transaction (WETH -> ETH)
    */
   private validateUnwrap(
     tx: EVMTransaction,
@@ -530,7 +482,6 @@ export class ERC4626Validator extends BaseEVMValidator {
   /**
    * Get WETH address for a chain
    * 
-   * WETH addresses from vault-config.ts
    */
   private getWethAddress(chainId: number): string | null {
     const WETH_ADDRESSES: Record<number, string> = {

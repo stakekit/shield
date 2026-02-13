@@ -1,9 +1,6 @@
 // Validator
 export { ERC4626Validator } from './erc4626.validator';
 
-// Configuration
-export { fetchERC4626Vaults, clearVaultCache } from './vault-config';
-
 // Types
 export type {
   VaultInfo,
