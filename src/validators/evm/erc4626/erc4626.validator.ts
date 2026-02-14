@@ -35,8 +35,8 @@ const WETH_ABI = [
 
 /**
  * Generic ERC4626 Validator
- * 
- * 
+ *
+ *
  * Transaction Types Validated:
  * - APPROVAL: ERC20 token approval before deposit
  * - WRAP: Convert native ETH to WETH (optional, for WETH vaults)
@@ -49,8 +49,8 @@ export class ERC4626Validator extends BaseEVMValidator {
   private readonly erc20Interface: ethers.Interface;
   private readonly wethInterface: ethers.Interface;
   private vaultsByChain: Map<number, Set<string>>; // chainId -> Set of vault addresses
-  private vaultInfoMap: Map<string, VaultInfo>;    // "chainId:address" -> VaultInfo
-  
+  private vaultInfoMap: Map<string, VaultInfo>; // "chainId:address" -> VaultInfo
+
   constructor(vaultConfig: VaultConfiguration) {
     super();
     this.erc4626Interface = new ethers.Interface(ERC4626_ABI);
@@ -63,19 +63,19 @@ export class ERC4626Validator extends BaseEVMValidator {
 
   /**
    * Load vault configuration
-   * 
-  */
+   *
+   */
   private loadConfiguration(config: VaultConfiguration): void {
     for (const vault of config.vaults) {
       const chainId = vault.chainId;
       const address = vault.address.toLowerCase();
-      
+
       // Add to chain-based lookup
       if (!this.vaultsByChain.has(chainId)) {
         this.vaultsByChain.set(chainId, new Set());
       }
       this.vaultsByChain.get(chainId)!.add(address);
-      
+
       // Add to info map
       this.vaultInfoMap.set(`${chainId}:${address}`, vault);
     }
@@ -83,20 +83,19 @@ export class ERC4626Validator extends BaseEVMValidator {
 
   getSupportedTransactionTypes(): TransactionType[] {
     return [
-      TransactionType.APPROVAL,   
-      TransactionType.WRAP,       
-      TransactionType.SUPPLY,     
-      TransactionType.WITHDRAW,   
-      TransactionType.UNWRAP,     
+      TransactionType.APPROVAL,
+      TransactionType.WRAP,
+      TransactionType.SUPPLY,
+      TransactionType.WITHDRAW,
+      TransactionType.UNWRAP,
     ];
   }
-
 
   validate(
     unsignedTransaction: string,
     transactionType: TransactionType,
     userAddress: string,
-    args?: ActionArguments,
+    _args?: ActionArguments,
     _context?: ValidationContext,
   ): ValidationResult {
     const decoded = this.decodeEVMTransaction(unsignedTransaction);
@@ -141,7 +140,7 @@ export class ERC4626Validator extends BaseEVMValidator {
         });
     }
   }
- 
+
   /**
    * Validate APPROVAL transaction
    */
@@ -184,7 +183,9 @@ export class ERC4626Validator extends BaseEVMValidator {
     }
 
     // After confirming spender is a whitelisted vault, verify tx.to is the vault's input token
-    const vaultInfo = this.vaultInfoMap.get(`${chainId}:${spender.toLowerCase()}`);
+    const vaultInfo = this.vaultInfoMap.get(
+      `${chainId}:${spender.toLowerCase()}`,
+    );
     if (vaultInfo && tx.to?.toLowerCase() !== vaultInfo.inputTokenAddress) {
       return this.blocked('Approval token does not match vault input token', {
         expected: vaultInfo.inputTokenAddress,
@@ -204,10 +205,7 @@ export class ERC4626Validator extends BaseEVMValidator {
   /**
    * Validate WRAP transaction (ETH → WETH)
    */
-  private validateWrap(
-    tx: EVMTransaction,
-    chainId: number,
-  ): ValidationResult {
+  private validateWrap(tx: EVMTransaction, chainId: number): ValidationResult {
     // Get WETH address for this chain
     const wethAddress = this.getWethAddress(chainId);
     if (!wethAddress) {
@@ -329,7 +327,6 @@ export class ERC4626Validator extends BaseEVMValidator {
     return this.safe();
   }
 
-
   /**
    * Validate WITHDRAW transaction (withdraw/redeem)
    */
@@ -422,7 +419,6 @@ export class ERC4626Validator extends BaseEVMValidator {
     return this.safe();
   }
 
-
   /**
    * Validate UNWRAP transaction (WETH -> ETH)
    */
@@ -489,20 +485,20 @@ export class ERC4626Validator extends BaseEVMValidator {
 
   /**
    * Get WETH address for a chain
-   * 
+   *
    */
   private getWethAddress(chainId: number): string | null {
     const WETH_ADDRESSES: Record<number, string> = {
-      1: '0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2',      // Ethereum
-      42161: '0x82af49447d8a07e3bd95bd0d56f35241523fbab1',  // Arbitrum
-      10: '0x4200000000000000000000000000000000000006',     // Optimism
-      8453: '0x4200000000000000000000000000000000000006',   // Base
-      137: '0x7ceb23fd6bc0add59e62ac25578270cff1b9f619',   // Polygon
-      100: '0x6a023ccd1ff6f2045c3309768ead9e68f978f6e1',   // Gnosis
-      43114: '0x49d5c2bdffac6ce2bfdb6640f4f80f226bc10bab',// Avalanche
-      56: '0x2170ed0880ac9a755fd29b2688956bd959f933f8',   // Binance
-      146: '0x50c42dEAcD8Fc9773493ED674b675bE577f2634b',   // Sonic
-      130: '0x4200000000000000000000000000000000000006',   // Unichain
+      1: '0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2', // Ethereum
+      42161: '0x82af49447d8a07e3bd95bd0d56f35241523fbab1', // Arbitrum
+      10: '0x4200000000000000000000000000000000000006', // Optimism
+      8453: '0x4200000000000000000000000000000000000006', // Base
+      137: '0x7ceb23fd6bc0add59e62ac25578270cff1b9f619', // Polygon
+      100: '0x6a023ccd1ff6f2045c3309768ead9e68f978f6e1', // Gnosis
+      43114: '0x49d5c2bdffac6ce2bfdb6640f4f80f226bc10bab', // Avalanche
+      56: '0x2170ed0880ac9a755fd29b2688956bd959f933f8', // Binance
+      146: '0x50c42dEAcD8Fc9773493ED674b675bE577f2634b', // Sonic
+      130: '0x4200000000000000000000000000000000000006', // Unichain
     };
 
     return WETH_ADDRESSES[chainId] || null;

@@ -10,7 +10,7 @@ import { TransactionType } from '../../../types';
 const USER_ADDRESS = '0x742d35cc6634c0532925a3b844bc9e7595f0beb8';
 const OTHER_ADDRESS = '0x1111111111111111111111111111111111111111';
 const VAULT_ADDRESS = '0x78E3E051D32157AACD550fBB78458762d8f7edFF'; // Euler vault on Arbitrum
-const INPUT_TOKEN = '0xaf88d065e77c8cC2239327C5EDb3A432268e5831';  // USDC on Arbitrum
+const INPUT_TOKEN = '0xaf88d065e77c8cC2239327C5EDb3A432268e5831'; // USDC on Arbitrum
 const WETH_ARBITRUM = '0x82aF49447D8a07e3bd95BD0d56f35241523fBab1';
 const WETH_VAULT_ADDRESS = '0xAABBCCDDEEFF00112233445566778899AABBCCDD';
 const MALICIOUS_ADDRESS = '0x000000000000000000000000000000000000bad1';
@@ -120,7 +120,11 @@ describe('ERC4626Validator', () => {
         ethers.parseUnits('1000', 6), // 1000 USDC
       ]);
       const tx = buildTx({ to: INPUT_TOKEN, data, value: '0x0' });
-      const result = validator.validate(tx, TransactionType.APPROVAL, USER_ADDRESS);
+      const result = validator.validate(
+        tx,
+        TransactionType.APPROVAL,
+        USER_ADDRESS,
+      );
       expect(result.isValid).toBe(true);
     });
 
@@ -130,7 +134,11 @@ describe('ERC4626Validator', () => {
         ethers.parseUnits('1000', 6),
       ]);
       const tx = buildTx({ to: INPUT_TOKEN, data, value: '0x0' });
-      const result = validator.validate(tx, TransactionType.APPROVAL, USER_ADDRESS);
+      const result = validator.validate(
+        tx,
+        TransactionType.APPROVAL,
+        USER_ADDRESS,
+      );
       expect(result.isValid).toBe(false);
       expect(result.reason).toContain('not a whitelisted vault');
     });
@@ -138,7 +146,11 @@ describe('ERC4626Validator', () => {
     it('should reject zero approval amount', () => {
       const data = erc20Iface.encodeFunctionData('approve', [VAULT_ADDRESS, 0]);
       const tx = buildTx({ to: INPUT_TOKEN, data, value: '0x0' });
-      const result = validator.validate(tx, TransactionType.APPROVAL, USER_ADDRESS);
+      const result = validator.validate(
+        tx,
+        TransactionType.APPROVAL,
+        USER_ADDRESS,
+      );
       expect(result.isValid).toBe(false);
       expect(result.reason).toContain('zero');
     });
@@ -149,7 +161,11 @@ describe('ERC4626Validator', () => {
         ethers.parseUnits('1000', 6),
       ]);
       const tx = buildTx({ to: INPUT_TOKEN, data, value: '0xde0b6b3a7640000' });
-      const result = validator.validate(tx, TransactionType.APPROVAL, USER_ADDRESS);
+      const result = validator.validate(
+        tx,
+        TransactionType.APPROVAL,
+        USER_ADDRESS,
+      );
       expect(result.isValid).toBe(false);
       expect(result.reason).toContain('should not send ETH');
     });
@@ -162,7 +178,11 @@ describe('ERC4626Validator', () => {
       // Tamper: append extra bytes
       const tampered = data + 'deadbeef';
       const tx = buildTx({ to: INPUT_TOKEN, data: tampered, value: '0x0' });
-      const result = validator.validate(tx, TransactionType.APPROVAL, USER_ADDRESS);
+      const result = validator.validate(
+        tx,
+        TransactionType.APPROVAL,
+        USER_ADDRESS,
+      );
       expect(result.isValid).toBe(false);
       expect(result.reason).toContain('tampered');
     });
@@ -174,7 +194,11 @@ describe('ERC4626Validator', () => {
       ]);
       // Chain 1 but vault is registered on 42161
       const tx = buildTx({ to: INPUT_TOKEN, data, value: '0x0', chainId: 1 });
-      const result = validator.validate(tx, TransactionType.APPROVAL, USER_ADDRESS);
+      const result = validator.validate(
+        tx,
+        TransactionType.APPROVAL,
+        USER_ADDRESS,
+      );
       expect(result.isValid).toBe(false);
       expect(result.reason).toContain('not a whitelisted vault');
     });
@@ -185,7 +209,11 @@ describe('ERC4626Validator', () => {
       ]);
       // tx.to is some random address, not the vault's inputTokenAddress (USDC)
       const tx = buildTx({ to: OTHER_ADDRESS, data, value: '0x0' });
-      const result = validator.validate(tx, TransactionType.APPROVAL, USER_ADDRESS);
+      const result = validator.validate(
+        tx,
+        TransactionType.APPROVAL,
+        USER_ADDRESS,
+      );
       expect(result.isValid).toBe(false);
       expect(result.reason).toContain('does not match vault input token');
     });
@@ -196,7 +224,11 @@ describe('ERC4626Validator', () => {
         ethers.MaxUint256,
       ]);
       const tx = buildTx({ to: INPUT_TOKEN, data, value: '0x0' });
-      const result = validator.validate(tx, TransactionType.APPROVAL, USER_ADDRESS);
+      const result = validator.validate(
+        tx,
+        TransactionType.APPROVAL,
+        USER_ADDRESS,
+      );
       expect(result.isValid).toBe(true);
     });
   });
@@ -276,7 +308,11 @@ describe('ERC4626Validator', () => {
         USER_ADDRESS,
       ]);
       const tx = buildTx({ to: VAULT_ADDRESS, data, value: '0x0' });
-      const result = validator.validate(tx, TransactionType.SUPPLY, USER_ADDRESS);
+      const result = validator.validate(
+        tx,
+        TransactionType.SUPPLY,
+        USER_ADDRESS,
+      );
       expect(result.isValid).toBe(true);
     });
 
@@ -286,7 +322,11 @@ describe('ERC4626Validator', () => {
         USER_ADDRESS,
       ]);
       const tx = buildTx({ to: VAULT_ADDRESS, data, value: '0x0' });
-      const result = validator.validate(tx, TransactionType.SUPPLY, USER_ADDRESS);
+      const result = validator.validate(
+        tx,
+        TransactionType.SUPPLY,
+        USER_ADDRESS,
+      );
       expect(result.isValid).toBe(true);
     });
 
@@ -296,7 +336,11 @@ describe('ERC4626Validator', () => {
         USER_ADDRESS,
       ]);
       const tx = buildTx({ to: MALICIOUS_ADDRESS, data, value: '0x0' });
-      const result = validator.validate(tx, TransactionType.SUPPLY, USER_ADDRESS);
+      const result = validator.validate(
+        tx,
+        TransactionType.SUPPLY,
+        USER_ADDRESS,
+      );
       expect(result.isValid).toBe(false);
       expect(result.reason).toContain('not whitelisted');
     });
@@ -307,7 +351,11 @@ describe('ERC4626Validator', () => {
         OTHER_ADDRESS, // receiver is someone else
       ]);
       const tx = buildTx({ to: VAULT_ADDRESS, data, value: '0x0' });
-      const result = validator.validate(tx, TransactionType.SUPPLY, USER_ADDRESS);
+      const result = validator.validate(
+        tx,
+        TransactionType.SUPPLY,
+        USER_ADDRESS,
+      );
       expect(result.isValid).toBe(false);
       expect(result.reason).toContain('Receiver address does not match');
     });
@@ -322,7 +370,11 @@ describe('ERC4626Validator', () => {
         data,
         value: '0xde0b6b3a7640000', // 1 ETH
       });
-      const result = validator.validate(tx, TransactionType.SUPPLY, USER_ADDRESS);
+      const result = validator.validate(
+        tx,
+        TransactionType.SUPPLY,
+        USER_ADDRESS,
+      );
       expect(result.isValid).toBe(false);
       expect(result.reason).toContain('should not send ETH to non-WETH vault');
     });
@@ -334,7 +386,11 @@ describe('ERC4626Validator', () => {
       ]);
       const tampered = data + 'cafebabe';
       const tx = buildTx({ to: VAULT_ADDRESS, data: tampered, value: '0x0' });
-      const result = validator.validate(tx, TransactionType.SUPPLY, USER_ADDRESS);
+      const result = validator.validate(
+        tx,
+        TransactionType.SUPPLY,
+        USER_ADDRESS,
+      );
       expect(result.isValid).toBe(false);
       expect(result.reason).toContain('tampered');
     });
@@ -350,7 +406,11 @@ describe('ERC4626Validator', () => {
         data,
         value: '0x0',
       });
-      const result = validator.validate(tx, TransactionType.SUPPLY, USER_ADDRESS);
+      const result = validator.validate(
+        tx,
+        TransactionType.SUPPLY,
+        USER_ADDRESS,
+      );
       expect(result.isValid).toBe(false);
       expect(result.reason).toContain('not whitelisted');
     });
@@ -362,7 +422,11 @@ describe('ERC4626Validator', () => {
       ]);
       // Vault registered on 42161 but tx says chain 1
       const tx = buildTx({ to: VAULT_ADDRESS, data, value: '0x0', chainId: 1 });
-      const result = validator.validate(tx, TransactionType.SUPPLY, USER_ADDRESS);
+      const result = validator.validate(
+        tx,
+        TransactionType.SUPPLY,
+        USER_ADDRESS,
+      );
       expect(result.isValid).toBe(false);
       expect(result.reason).toContain('not whitelisted');
     });
@@ -378,7 +442,11 @@ describe('ERC4626Validator', () => {
         value: '0x0',
         from: OTHER_ADDRESS, // not the user
       });
-      const result = validator.validate(tx, TransactionType.SUPPLY, USER_ADDRESS);
+      const result = validator.validate(
+        tx,
+        TransactionType.SUPPLY,
+        USER_ADDRESS,
+      );
       expect(result.isValid).toBe(false);
       expect(result.reason).toContain('not from user address');
     });
@@ -391,7 +459,11 @@ describe('ERC4626Validator', () => {
         ethers.parseUnits('1000', 6),
       ]);
       const tx = buildTx({ to: VAULT_ADDRESS, data, value: '0x0' });
-      const result = validator.validate(tx, TransactionType.SUPPLY, USER_ADDRESS);
+      const result = validator.validate(
+        tx,
+        TransactionType.SUPPLY,
+        USER_ADDRESS,
+      );
       expect(result.isValid).toBe(false);
     });
 
@@ -405,14 +477,25 @@ describe('ERC4626Validator', () => {
         data,
         value: '0xde0b6b3a7640000', // 1 ETH
       });
-      const result = validator.validate(tx, TransactionType.SUPPLY, USER_ADDRESS);
+      const result = validator.validate(
+        tx,
+        TransactionType.SUPPLY,
+        USER_ADDRESS,
+      );
       expect(result.isValid).toBe(true);
     });
 
     it('should reject zero-amount deposit', () => {
-      const data = erc4626Iface.encodeFunctionData('deposit', [0, USER_ADDRESS]);
+      const data = erc4626Iface.encodeFunctionData('deposit', [
+        0,
+        USER_ADDRESS,
+      ]);
       const tx = buildTx({ to: VAULT_ADDRESS, data, value: '0x0' });
-      const result = validator.validate(tx, TransactionType.SUPPLY, USER_ADDRESS);
+      const result = validator.validate(
+        tx,
+        TransactionType.SUPPLY,
+        USER_ADDRESS,
+      );
       expect(result.isValid).toBe(false);
       expect(result.reason).toContain('zero');
     });
@@ -428,7 +511,11 @@ describe('ERC4626Validator', () => {
         [ethers.parseUnits('1000', 6), USER_ADDRESS, USER_ADDRESS],
       );
       const tx = buildTx({ to: VAULT_ADDRESS, data, value: '0x0' });
-      const result = validator.validate(tx, TransactionType.WITHDRAW, USER_ADDRESS);
+      const result = validator.validate(
+        tx,
+        TransactionType.WITHDRAW,
+        USER_ADDRESS,
+      );
       expect(result.isValid).toBe(true);
     });
 
@@ -438,7 +525,11 @@ describe('ERC4626Validator', () => {
         [ethers.parseUnits('500', 18), USER_ADDRESS, USER_ADDRESS],
       );
       const tx = buildTx({ to: VAULT_ADDRESS, data, value: '0x0' });
-      const result = validator.validate(tx, TransactionType.WITHDRAW, USER_ADDRESS);
+      const result = validator.validate(
+        tx,
+        TransactionType.WITHDRAW,
+        USER_ADDRESS,
+      );
       expect(result.isValid).toBe(true);
     });
 
@@ -448,7 +539,11 @@ describe('ERC4626Validator', () => {
         [ethers.parseUnits('1000', 6), OTHER_ADDRESS, USER_ADDRESS],
       );
       const tx = buildTx({ to: VAULT_ADDRESS, data, value: '0x0' });
-      const result = validator.validate(tx, TransactionType.WITHDRAW, USER_ADDRESS);
+      const result = validator.validate(
+        tx,
+        TransactionType.WITHDRAW,
+        USER_ADDRESS,
+      );
       expect(result.isValid).toBe(false);
       expect(result.reason).toContain('Receiver address does not match');
     });
@@ -459,7 +554,11 @@ describe('ERC4626Validator', () => {
         [ethers.parseUnits('1000', 6), USER_ADDRESS, OTHER_ADDRESS],
       );
       const tx = buildTx({ to: VAULT_ADDRESS, data, value: '0x0' });
-      const result = validator.validate(tx, TransactionType.WITHDRAW, USER_ADDRESS);
+      const result = validator.validate(
+        tx,
+        TransactionType.WITHDRAW,
+        USER_ADDRESS,
+      );
       expect(result.isValid).toBe(false);
       expect(result.reason).toContain('Owner address does not match');
     });
@@ -470,7 +569,11 @@ describe('ERC4626Validator', () => {
         [ethers.parseUnits('1000', 6), USER_ADDRESS, USER_ADDRESS],
       );
       const tx = buildTx({ to: MALICIOUS_ADDRESS, data, value: '0x0' });
-      const result = validator.validate(tx, TransactionType.WITHDRAW, USER_ADDRESS);
+      const result = validator.validate(
+        tx,
+        TransactionType.WITHDRAW,
+        USER_ADDRESS,
+      );
       expect(result.isValid).toBe(false);
       expect(result.reason).toContain('not whitelisted');
     });
@@ -485,7 +588,11 @@ describe('ERC4626Validator', () => {
         data,
         value: '0xde0b6b3a7640000',
       });
-      const result = validator.validate(tx, TransactionType.WITHDRAW, USER_ADDRESS);
+      const result = validator.validate(
+        tx,
+        TransactionType.WITHDRAW,
+        USER_ADDRESS,
+      );
       expect(result.isValid).toBe(false);
       expect(result.reason).toContain('should not send ETH');
     });
@@ -497,7 +604,11 @@ describe('ERC4626Validator', () => {
       );
       const tampered = data + '12345678';
       const tx = buildTx({ to: VAULT_ADDRESS, data: tampered, value: '0x0' });
-      const result = validator.validate(tx, TransactionType.WITHDRAW, USER_ADDRESS);
+      const result = validator.validate(
+        tx,
+        TransactionType.WITHDRAW,
+        USER_ADDRESS,
+      );
       expect(result.isValid).toBe(false);
       expect(result.reason).toContain('tampered');
     });
@@ -510,7 +621,11 @@ describe('ERC4626Validator', () => {
         ethers.parseUnits('1000', 6),
       ]);
       const tx = buildTx({ to: VAULT_ADDRESS, data, value: '0x0' });
-      const result = validator.validate(tx, TransactionType.WITHDRAW, USER_ADDRESS);
+      const result = validator.validate(
+        tx,
+        TransactionType.WITHDRAW,
+        USER_ADDRESS,
+      );
       expect(result.isValid).toBe(false);
     });
 
@@ -520,7 +635,11 @@ describe('ERC4626Validator', () => {
         [0, USER_ADDRESS, USER_ADDRESS],
       );
       const tx = buildTx({ to: VAULT_ADDRESS, data, value: '0x0' });
-      const result = validator.validate(tx, TransactionType.WITHDRAW, USER_ADDRESS);
+      const result = validator.validate(
+        tx,
+        TransactionType.WITHDRAW,
+        USER_ADDRESS,
+      );
       expect(result.isValid).toBe(false);
       expect(result.reason).toContain('zero');
     });
@@ -535,14 +654,22 @@ describe('ERC4626Validator', () => {
         ethers.parseEther('1'),
       ]);
       const tx = buildTx({ to: WETH_ARBITRUM, data, value: '0x0' });
-      const result = validator.validate(tx, TransactionType.UNWRAP, USER_ADDRESS);
+      const result = validator.validate(
+        tx,
+        TransactionType.UNWRAP,
+        USER_ADDRESS,
+      );
       expect(result.isValid).toBe(true);
     });
 
     it('should reject zero amount', () => {
       const data = wethIface.encodeFunctionData('withdraw', [0]);
       const tx = buildTx({ to: WETH_ARBITRUM, data, value: '0x0' });
-      const result = validator.validate(tx, TransactionType.UNWRAP, USER_ADDRESS);
+      const result = validator.validate(
+        tx,
+        TransactionType.UNWRAP,
+        USER_ADDRESS,
+      );
       expect(result.isValid).toBe(false);
       expect(result.reason).toContain('UNWRAP amount is zero');
     });
@@ -552,7 +679,11 @@ describe('ERC4626Validator', () => {
         ethers.parseEther('1'),
       ]);
       const tx = buildTx({ to: MALICIOUS_ADDRESS, data, value: '0x0' });
-      const result = validator.validate(tx, TransactionType.UNWRAP, USER_ADDRESS);
+      const result = validator.validate(
+        tx,
+        TransactionType.UNWRAP,
+        USER_ADDRESS,
+      );
       expect(result.isValid).toBe(false);
       expect(result.reason).toContain('not to WETH contract');
     });
@@ -566,7 +697,11 @@ describe('ERC4626Validator', () => {
         data,
         value: '0xde0b6b3a7640000',
       });
-      const result = validator.validate(tx, TransactionType.UNWRAP, USER_ADDRESS);
+      const result = validator.validate(
+        tx,
+        TransactionType.UNWRAP,
+        USER_ADDRESS,
+      );
       expect(result.isValid).toBe(false);
       expect(result.reason).toContain('should not send ETH');
     });
@@ -582,7 +717,11 @@ describe('ERC4626Validator', () => {
         USER_ADDRESS,
       ]);
       const tx = buildTx({ to: PAUSED_VAULT_ADDRESS, data, value: '0x0' });
-      const result = validator.validate(tx, TransactionType.SUPPLY, USER_ADDRESS);
+      const result = validator.validate(
+        tx,
+        TransactionType.SUPPLY,
+        USER_ADDRESS,
+      );
       expect(result.isValid).toBe(false);
       expect(result.reason).toContain('paused');
     });
@@ -593,7 +732,11 @@ describe('ERC4626Validator', () => {
         [ethers.parseUnits('1000', 6), USER_ADDRESS, USER_ADDRESS],
       );
       const tx = buildTx({ to: PAUSED_VAULT_ADDRESS, data, value: '0x0' });
-      const result = validator.validate(tx, TransactionType.WITHDRAW, USER_ADDRESS);
+      const result = validator.validate(
+        tx,
+        TransactionType.WITHDRAW,
+        USER_ADDRESS,
+      );
       expect(result.isValid).toBe(false);
       expect(result.reason).toContain('disabled');
     });
@@ -680,33 +823,33 @@ describe('ERC4626Validator', () => {
   // =========================================================================
   describe('auto-detection (simulating Shield routing)', () => {
     const allTypes = validator.getSupportedTransactionTypes();
-  
+
     it('deposit calldata should match exactly one type: SUPPLY', () => {
       const data = erc4626Iface.encodeFunctionData('deposit', [
         ethers.parseUnits('1000', 6),
         USER_ADDRESS,
       ]);
       const tx = buildTx({ to: VAULT_ADDRESS, data, value: '0x0' });
-  
+
       const matches = allTypes.filter(
         (type) => validator.validate(tx, type, USER_ADDRESS).isValid,
       );
       expect(matches).toEqual([TransactionType.SUPPLY]);
     });
-  
+
     it('withdraw calldata should match exactly one type: WITHDRAW', () => {
       const data = erc4626Iface.encodeFunctionData(
         'withdraw(uint256,address,address)',
         [ethers.parseUnits('1000', 6), USER_ADDRESS, USER_ADDRESS],
       );
       const tx = buildTx({ to: VAULT_ADDRESS, data, value: '0x0' });
-  
+
       const matches = allTypes.filter(
         (type) => validator.validate(tx, type, USER_ADDRESS).isValid,
       );
       expect(matches).toEqual([TransactionType.WITHDRAW]);
     });
-  
+
     it('WETH deposit calldata should match exactly one type: WRAP', () => {
       const data = wethIface.encodeFunctionData('deposit', []);
       const tx = buildTx({
@@ -714,32 +857,32 @@ describe('ERC4626Validator', () => {
         data,
         value: '0xde0b6b3a7640000',
       });
-  
+
       const matches = allTypes.filter(
         (type) => validator.validate(tx, type, USER_ADDRESS).isValid,
       );
       expect(matches).toEqual([TransactionType.WRAP]);
     });
-  
+
     it('approval calldata should match exactly one type: APPROVAL', () => {
       const data = erc20Iface.encodeFunctionData('approve', [
         VAULT_ADDRESS,
         ethers.parseUnits('1000', 6),
       ]);
       const tx = buildTx({ to: INPUT_TOKEN, data, value: '0x0' });
-  
+
       const matches = allTypes.filter(
         (type) => validator.validate(tx, type, USER_ADDRESS).isValid,
       );
       expect(matches).toEqual([TransactionType.APPROVAL]);
     });
-  
+
     it('WETH withdraw calldata should match exactly one type: UNWRAP', () => {
       const data = wethIface.encodeFunctionData('withdraw', [
         ethers.parseEther('1'),
       ]);
       const tx = buildTx({ to: WETH_ARBITRUM, data, value: '0x0' });
-  
+
       const matches = allTypes.filter(
         (type) => validator.validate(tx, type, USER_ADDRESS).isValid,
       );
