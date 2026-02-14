@@ -178,6 +178,27 @@ describe('ERC4626Validator', () => {
       expect(result.isValid).toBe(false);
       expect(result.reason).toContain('not a whitelisted vault');
     });
+    it('should reject when tx.to is not the vault input token', () => {
+      const data = erc20Iface.encodeFunctionData('approve', [
+        VAULT_ADDRESS,
+        ethers.parseUnits('1000', 6),
+      ]);
+      // tx.to is some random address, not the vault's inputTokenAddress (USDC)
+      const tx = buildTx({ to: OTHER_ADDRESS, data, value: '0x0' });
+      const result = validator.validate(tx, TransactionType.APPROVAL, USER_ADDRESS);
+      expect(result.isValid).toBe(false);
+      expect(result.reason).toContain('does not match vault input token');
+    });
+
+    it('should accept max uint256 approval amount', () => {
+      const data = erc20Iface.encodeFunctionData('approve', [
+        VAULT_ADDRESS,
+        ethers.MaxUint256,
+      ]);
+      const tx = buildTx({ to: INPUT_TOKEN, data, value: '0x0' });
+      const result = validator.validate(tx, TransactionType.APPROVAL, USER_ADDRESS);
+      expect(result.isValid).toBe(true);
+    });
   });
 
   // =========================================================================
@@ -361,6 +382,40 @@ describe('ERC4626Validator', () => {
       expect(result.isValid).toBe(false);
       expect(result.reason).toContain('not from user address');
     });
+    it('should reject unknown function selector (e.g. transfer)', () => {
+      const transferIface = new ethers.Interface([
+        'function transfer(address to, uint256 amount) returns (bool)',
+      ]);
+      const data = transferIface.encodeFunctionData('transfer', [
+        OTHER_ADDRESS,
+        ethers.parseUnits('1000', 6),
+      ]);
+      const tx = buildTx({ to: VAULT_ADDRESS, data, value: '0x0' });
+      const result = validator.validate(tx, TransactionType.SUPPLY, USER_ADDRESS);
+      expect(result.isValid).toBe(false);
+    });
+
+    it('should accept SUPPLY to WETH vault with ETH value', () => {
+      const data = erc4626Iface.encodeFunctionData('deposit', [
+        ethers.parseEther('1'),
+        USER_ADDRESS,
+      ]);
+      const tx = buildTx({
+        to: WETH_VAULT_ADDRESS,
+        data,
+        value: '0xde0b6b3a7640000', // 1 ETH
+      });
+      const result = validator.validate(tx, TransactionType.SUPPLY, USER_ADDRESS);
+      expect(result.isValid).toBe(true);
+    });
+
+    it('should reject zero-amount deposit', () => {
+      const data = erc4626Iface.encodeFunctionData('deposit', [0, USER_ADDRESS]);
+      const tx = buildTx({ to: VAULT_ADDRESS, data, value: '0x0' });
+      const result = validator.validate(tx, TransactionType.SUPPLY, USER_ADDRESS);
+      expect(result.isValid).toBe(false);
+      expect(result.reason).toContain('zero');
+    });
   });
 
   // =========================================================================
@@ -446,6 +501,29 @@ describe('ERC4626Validator', () => {
       expect(result.isValid).toBe(false);
       expect(result.reason).toContain('tampered');
     });
+    it('should reject unknown function selector (e.g. transfer)', () => {
+      const transferIface = new ethers.Interface([
+        'function transfer(address to, uint256 amount) returns (bool)',
+      ]);
+      const data = transferIface.encodeFunctionData('transfer', [
+        OTHER_ADDRESS,
+        ethers.parseUnits('1000', 6),
+      ]);
+      const tx = buildTx({ to: VAULT_ADDRESS, data, value: '0x0' });
+      const result = validator.validate(tx, TransactionType.WITHDRAW, USER_ADDRESS);
+      expect(result.isValid).toBe(false);
+    });
+
+    it('should reject zero-amount withdraw', () => {
+      const data = erc4626Iface.encodeFunctionData(
+        'withdraw(uint256,address,address)',
+        [0, USER_ADDRESS, USER_ADDRESS],
+      );
+      const tx = buildTx({ to: VAULT_ADDRESS, data, value: '0x0' });
+      const result = validator.validate(tx, TransactionType.WITHDRAW, USER_ADDRESS);
+      expect(result.isValid).toBe(false);
+      expect(result.reason).toContain('zero');
+    });
   });
 
   // =========================================================================
@@ -518,6 +596,154 @@ describe('ERC4626Validator', () => {
       const result = validator.validate(tx, TransactionType.WITHDRAW, USER_ADDRESS);
       expect(result.isValid).toBe(false);
       expect(result.reason).toContain('disabled');
+    });
+  });
+  // =========================================================================
+  // Shared path edge cases
+  // =========================================================================
+  describe('shared validation path edge cases', () => {
+    it('should reject invalid JSON input', () => {
+      const result = validator.validate(
+        'not-valid-json',
+        TransactionType.SUPPLY,
+        USER_ADDRESS,
+      );
+      expect(result.isValid).toBe(false);
+      expect(result.reason).toContain('Failed to decode');
+    });
+
+    it('should reject when from field is missing', () => {
+      const data = erc4626Iface.encodeFunctionData('deposit', [
+        ethers.parseUnits('1000', 6),
+        USER_ADDRESS,
+      ]);
+      // Build raw JSON without using buildTx, so we can omit `from`
+      const txObj = {
+        to: VAULT_ADDRESS,
+        value: '0x0',
+        data,
+        nonce: 0,
+        gasLimit: '0x30d40',
+        maxFeePerGas: '0x6fc23ac00',
+        maxPriorityFeePerGas: '0x3b9aca00',
+        chainId: CHAIN_ID,
+        type: 2,
+      };
+      const result = validator.validate(
+        JSON.stringify(txObj),
+        TransactionType.SUPPLY,
+        USER_ADDRESS,
+      );
+      expect(result.isValid).toBe(false);
+      expect(result.reason).toContain('not from user address');
+    });
+
+    it('should reject when chainId is missing', () => {
+      const data = erc4626Iface.encodeFunctionData('deposit', [
+        ethers.parseUnits('1000', 6),
+        USER_ADDRESS,
+      ]);
+      const txObj = {
+        from: USER_ADDRESS,
+        to: VAULT_ADDRESS,
+        value: '0x0',
+        data,
+        type: 2,
+        // no chainId
+      };
+      const result = validator.validate(
+        JSON.stringify(txObj),
+        TransactionType.SUPPLY,
+        USER_ADDRESS,
+      );
+      expect(result.isValid).toBe(false);
+      expect(result.reason).toContain('Failed to decode');
+    });
+
+    it('should reject when tx.to is null', () => {
+      const data = erc4626Iface.encodeFunctionData('deposit', [
+        ethers.parseUnits('1000', 6),
+        USER_ADDRESS,
+      ]);
+      const tx = buildTx({ to: null, data, value: '0x0' });
+      const result = validator.validate(
+        tx,
+        TransactionType.SUPPLY,
+        USER_ADDRESS,
+      );
+      expect(result.isValid).toBe(false);
+      expect(result.reason).toContain('no destination address');
+    });
+  });
+  // =========================================================================
+  // Shield tx auto-detection//routing simulation
+  // =========================================================================
+  describe('auto-detection (simulating Shield routing)', () => {
+    const allTypes = validator.getSupportedTransactionTypes();
+  
+    it('deposit calldata should match exactly one type: SUPPLY', () => {
+      const data = erc4626Iface.encodeFunctionData('deposit', [
+        ethers.parseUnits('1000', 6),
+        USER_ADDRESS,
+      ]);
+      const tx = buildTx({ to: VAULT_ADDRESS, data, value: '0x0' });
+  
+      const matches = allTypes.filter(
+        (type) => validator.validate(tx, type, USER_ADDRESS).isValid,
+      );
+      expect(matches).toEqual([TransactionType.SUPPLY]);
+    });
+  
+    it('withdraw calldata should match exactly one type: WITHDRAW', () => {
+      const data = erc4626Iface.encodeFunctionData(
+        'withdraw(uint256,address,address)',
+        [ethers.parseUnits('1000', 6), USER_ADDRESS, USER_ADDRESS],
+      );
+      const tx = buildTx({ to: VAULT_ADDRESS, data, value: '0x0' });
+  
+      const matches = allTypes.filter(
+        (type) => validator.validate(tx, type, USER_ADDRESS).isValid,
+      );
+      expect(matches).toEqual([TransactionType.WITHDRAW]);
+    });
+  
+    it('WETH deposit calldata should match exactly one type: WRAP', () => {
+      const data = wethIface.encodeFunctionData('deposit', []);
+      const tx = buildTx({
+        to: WETH_ARBITRUM,
+        data,
+        value: '0xde0b6b3a7640000',
+      });
+  
+      const matches = allTypes.filter(
+        (type) => validator.validate(tx, type, USER_ADDRESS).isValid,
+      );
+      expect(matches).toEqual([TransactionType.WRAP]);
+    });
+  
+    it('approval calldata should match exactly one type: APPROVAL', () => {
+      const data = erc20Iface.encodeFunctionData('approve', [
+        VAULT_ADDRESS,
+        ethers.parseUnits('1000', 6),
+      ]);
+      const tx = buildTx({ to: INPUT_TOKEN, data, value: '0x0' });
+  
+      const matches = allTypes.filter(
+        (type) => validator.validate(tx, type, USER_ADDRESS).isValid,
+      );
+      expect(matches).toEqual([TransactionType.APPROVAL]);
+    });
+  
+    it('WETH withdraw calldata should match exactly one type: UNWRAP', () => {
+      const data = wethIface.encodeFunctionData('withdraw', [
+        ethers.parseEther('1'),
+      ]);
+      const tx = buildTx({ to: WETH_ARBITRUM, data, value: '0x0' });
+  
+      const matches = allTypes.filter(
+        (type) => validator.validate(tx, type, USER_ADDRESS).isValid,
+      );
+      expect(matches).toEqual([TransactionType.UNWRAP]);
     });
   });
 });

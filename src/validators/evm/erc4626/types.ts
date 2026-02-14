@@ -21,11 +21,3 @@ export interface VaultConfiguration {
   vaults: VaultInfo[];
   lastUpdated: number;       // Timestamp of last fetch
 }
-
-/**
- * Validation context (optional additional data)
- */
-export interface ERC4626ValidationContext {
-  allowNativeETH?: boolean;
-  expectedVaultAddress?: string;
-}

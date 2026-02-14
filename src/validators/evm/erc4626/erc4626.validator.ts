@@ -312,7 +312,11 @@ export class ERC4626Validator extends BaseEVMValidator {
     }
 
     // Both deposit and mint have receiver as second parameter
-    const [_amount, receiver] = parsed.args;
+    const [amount, receiver] = parsed.args;
+    const amountBigInt = BigInt(amount);
+    if (amountBigInt === 0n) {
+      return this.blocked('Supply amount is zero');
+    }
 
     // Validate receiver is the user
     if (receiver.toLowerCase() !== userAddress.toLowerCase()) {
@@ -393,7 +397,11 @@ export class ERC4626Validator extends BaseEVMValidator {
     }
 
     // Both withdraw and redeem have: (amount, receiver, owner)
-    const [_amount, receiver, owner] = parsed.args;
+    const [amount, receiver, owner] = parsed.args;
+    const amountBigInt = BigInt(amount);
+    if (amountBigInt === 0n) {
+      return this.blocked('Withdraw amount is zero');
+    }
 
     // Validate owner is the user (they must own the shares)
     if (owner.toLowerCase() !== userAddress.toLowerCase()) {
