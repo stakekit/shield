@@ -140,14 +140,15 @@ The CLI reads JSON from stdin and writes JSON to stdout:
 ### CLI Examples (Bash)
 
 ```bash
-# List supported yields
-echo '{"apiVersion":"1.0","operation":"getSupportedYieldIds"}' | npx @yieldxyz/shield
-
 # Check if a yield is supported
 echo '{"apiVersion":"1.0","operation":"isSupported","yieldId":"ethereum-eth-lido-staking"}' | npx @yieldxyz/shield
 
 # Validate a transaction
 echo '{"apiVersion":"1.0","operation":"validate","yieldId":"ethereum-eth-lido-staking","unsignedTransaction":"{...}","userAddress":"0x..."}' | npx @yieldxyz/shield
+
+
+# List supported yields
+echo '{"apiVersion":"1.0","operation":"getSupportedYieldIds"}' | npx @yieldxyz/shield
 ```
 
 ## Supported Yield IDs
@@ -155,6 +156,29 @@ echo '{"apiVersion":"1.0","operation":"validate","yieldId":"ethereum-eth-lido-st
 - `ethereum-eth-lido-staking`
 - `solana-sol-native-multivalidator-staking`
 - `tron-trx-native-staking`
+- All generic ERC4626 vault yields from: Angle, Curve, Euler, Fluid, Gearbox, Idle Finance, Lista, Morpho, Sky, SummerFi, Yearn, Yo Protocol
+
+To see the full list:
+
+```bash
+echo '{"apiVersion":"1.0","operation":"getSupportedYieldIds"}' | npx @yieldxyz/shield
+```
+
+> **Note:** Aave, Maple, Spark use non-standard transaction flows and are not yet supported. Protocol-specific validators for these will be added in a future release.
+
+### ERC4626 Vault Operations
+
+Shield validates the following operations for all supported ERC4626 vaults:
+
+| Operation   | Transaction Type | Description                                   |
+| ----------- | ---------------- | --------------------------------------------- |
+| Approve     | APPROVAL         | ERC20 token approval for vault deposit        |
+| Deposit     | SUPPLY           | Deposit assets into vault                     |
+| Mint        | SUPPLY           | Mint vault shares                             |
+| Withdraw    | WITHDRAW         | Withdraw assets from vault                    |
+| Redeem      | WITHDRAW         | Redeem vault shares                           |
+| WETH Wrap   | WRAP             | Convert native ETH to WETH (WETH vaults only) |
+| WETH Unwrap | UNWRAP           | Convert WETH to native ETH (WETH vaults only) |
 
 ## API Reference
 
@@ -210,6 +234,10 @@ Shield is designed with security as a top priority:
 - **Pattern Matching**: Transactions must match exactly one known pattern to be valid
 - **No Network Access**: The CLI binary has no network capabilities - it only reads stdin and writes stdout
 - **Checksum Verification**: All release binaries include SHA256 checksums for integrity verification
+
+### Embedded Vault Registry
+
+ERC4626 vault data is embedded in the package at build time from `vault-registry.json`.
 
 ### Verifying Binary Integrity
 
