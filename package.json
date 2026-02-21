@@ -1,6 +1,6 @@
 {
   "name": "@yieldxyz/shield",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "description": "Zero-trust transaction validation library for Yield.xyz integrations.",
   "packageManager": "pnpm@10.12.2",
   "main": "./dist/index.js",
@@ -32,6 +32,7 @@
   },
   "files": [
     "dist",
+    "src/validators/evm/erc4626/vault-registry.json",
     "package.json",
     "README.md",
     "LICENSE"
