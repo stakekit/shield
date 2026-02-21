@@ -1,5 +1,6 @@
 import { loadEmbeddedRegistry } from './vault-config';
 import registryData from './vault-registry.json';
+import { validatorRegistry, GENERIC_ERC4626_PROTOCOLS } from '../../index';
 
 describe('vault-registry.json integrity', () => {
   const registry = registryData as {
@@ -17,8 +18,14 @@ describe('vault-registry.json integrity', () => {
 
   it('should have all required fields on every vault entry', () => {
     const requiredFields = [
-      'yieldId', 'address', 'chainId', 'protocol',
-      'network', 'inputTokenAddress', 'vaultTokenAddress', 'isWethVault',
+      'yieldId',
+      'address',
+      'chainId',
+      'protocol',
+      'network',
+      'inputTokenAddress',
+      'vaultTokenAddress',
+      'isWethVault',
     ];
     for (const vault of registry.vaults) {
       for (const field of requiredFields) {
@@ -30,8 +37,12 @@ describe('vault-registry.json integrity', () => {
   it('should have all addresses in lowercase', () => {
     for (const vault of registry.vaults as any[]) {
       expect(vault.address).toBe(vault.address.toLowerCase());
-      expect(vault.inputTokenAddress).toBe(vault.inputTokenAddress.toLowerCase());
-      expect(vault.vaultTokenAddress).toBe(vault.vaultTokenAddress.toLowerCase());
+      expect(vault.inputTokenAddress).toBe(
+        vault.inputTokenAddress.toLowerCase(),
+      );
+      expect(vault.vaultTokenAddress).toBe(
+        vault.vaultTokenAddress.toLowerCase(),
+      );
     }
   });
 
@@ -60,16 +71,15 @@ describe('loadEmbeddedRegistry()', () => {
 });
 
 describe('validator registry integration', () => {
-    it('should register every allowed-protocol yieldId from the embedded registry', () => {
-      const { validatorRegistry, GENERIC_ERC4626_PROTOCOLS } = require('../../index');
-      const config = loadEmbeddedRegistry();
-  
-      for (const vault of config.vaults) {
-        if (GENERIC_ERC4626_PROTOCOLS.has(vault.protocol)) {
-          expect(validatorRegistry.has(vault.yieldId)).toBe(true);
-        } else {
-          expect(validatorRegistry.has(vault.yieldId)).toBe(false);
-        }
+  it('should register every allowed-protocol yieldId from the embedded registry', () => {
+    const config = loadEmbeddedRegistry();
+
+    for (const vault of config.vaults) {
+      if (GENERIC_ERC4626_PROTOCOLS.has(vault.protocol)) {
+        expect(validatorRegistry.has(vault.yieldId)).toBe(true);
+      } else {
+        expect(validatorRegistry.has(vault.yieldId)).toBe(false);
       }
-    });
+    }
   });
+});

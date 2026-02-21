@@ -939,15 +939,25 @@ describe('ERC4626Validator', () => {
         data,
         value: '0xde0b6b3a7640000',
       });
-      const result = nonWethValidator.validate(tx, TransactionType.WRAP, USER_ADDRESS);
+      const result = nonWethValidator.validate(
+        tx,
+        TransactionType.WRAP,
+        USER_ADDRESS,
+      );
       expect(result.isValid).toBe(false);
       expect(result.reason).toContain('No WETH vaults registered');
     });
 
     it('should reject UNWRAP when validator has no WETH vaults', () => {
-      const data = wethIface.encodeFunctionData('withdraw', [ethers.parseEther('1')]);
+      const data = wethIface.encodeFunctionData('withdraw', [
+        ethers.parseEther('1'),
+      ]);
       const tx = buildTx({ to: WETH_ARBITRUM, data, value: '0x0' });
-      const result = nonWethValidator.validate(tx, TransactionType.UNWRAP, USER_ADDRESS);
+      const result = nonWethValidator.validate(
+        tx,
+        TransactionType.UNWRAP,
+        USER_ADDRESS,
+      );
       expect(result.isValid).toBe(false);
       expect(result.reason).toContain('No WETH vaults registered');
     });
@@ -959,14 +969,24 @@ describe('ERC4626Validator', () => {
         data,
         value: '0xde0b6b3a7640000',
       });
-      const result = wethValidator.validate(tx, TransactionType.WRAP, USER_ADDRESS);
+      const result = wethValidator.validate(
+        tx,
+        TransactionType.WRAP,
+        USER_ADDRESS,
+      );
       expect(result.isValid).toBe(true);
     });
 
     it('should accept UNWRAP when validator has a WETH vault', () => {
-      const data = wethIface.encodeFunctionData('withdraw', [ethers.parseEther('1')]);
+      const data = wethIface.encodeFunctionData('withdraw', [
+        ethers.parseEther('1'),
+      ]);
       const tx = buildTx({ to: WETH_ARBITRUM, data, value: '0x0' });
-      const result = wethValidator.validate(tx, TransactionType.UNWRAP, USER_ADDRESS);
+      const result = wethValidator.validate(
+        tx,
+        TransactionType.UNWRAP,
+        USER_ADDRESS,
+      );
       expect(result.isValid).toBe(true);
     });
   });

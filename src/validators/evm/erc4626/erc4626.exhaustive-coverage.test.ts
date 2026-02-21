@@ -3,7 +3,7 @@ import { ERC4626Validator } from './erc4626.validator';
 import { loadEmbeddedRegistry } from './vault-config';
 import { TransactionType } from '../../../types';
 
-const { GENERIC_ERC4626_PROTOCOLS } = require('../../index');
+import { GENERIC_ERC4626_PROTOCOLS } from '../../index';
 
 const erc20Iface = new ethers.Interface([
   'function approve(address spender, uint256 amount) returns (bool)',
@@ -74,7 +74,9 @@ describe(`ERC4626 exhaustive coverage — all ${allowedVaults.length} allowed va
           value: '0x0',
           chainId: vault.chainId,
         });
-        expect(validator.validate(tx, TransactionType.APPROVAL, USER).isValid).toBe(true);
+        expect(
+          validator.validate(tx, TransactionType.APPROVAL, USER).isValid,
+        ).toBe(true);
       });
 
       it(`SUPPLY — ${label}`, () => {
@@ -88,7 +90,9 @@ describe(`ERC4626 exhaustive coverage — all ${allowedVaults.length} allowed va
           value: '0x0',
           chainId: vault.chainId,
         });
-        expect(validator.validate(tx, TransactionType.SUPPLY, USER).isValid).toBe(true);
+        expect(
+          validator.validate(tx, TransactionType.SUPPLY, USER).isValid,
+        ).toBe(true);
       });
 
       it(`WITHDRAW — ${label}`, () => {
@@ -103,7 +107,9 @@ describe(`ERC4626 exhaustive coverage — all ${allowedVaults.length} allowed va
           value: '0x0',
           chainId: vault.chainId,
         });
-        expect(validator.validate(tx, TransactionType.WITHDRAW, USER).isValid).toBe(true);
+        expect(
+          validator.validate(tx, TransactionType.WITHDRAW, USER).isValid,
+        ).toBe(true);
       });
 
       if (vault.isWethVault && WETH_ADDRESSES[vault.chainId]) {
@@ -117,7 +123,9 @@ describe(`ERC4626 exhaustive coverage — all ${allowedVaults.length} allowed va
             value: '0xde0b6b3a7640000',
             chainId: vault.chainId,
           });
-          expect(validator.validate(tx, TransactionType.WRAP, USER).isValid).toBe(true);
+          expect(
+            validator.validate(tx, TransactionType.WRAP, USER).isValid,
+          ).toBe(true);
         });
 
         it(`UNWRAP — ${label}`, () => {
@@ -130,7 +138,9 @@ describe(`ERC4626 exhaustive coverage — all ${allowedVaults.length} allowed va
             value: '0x0',
             chainId: vault.chainId,
           });
-          expect(validator.validate(tx, TransactionType.UNWRAP, USER).isValid).toBe(true);
+          expect(
+            validator.validate(tx, TransactionType.UNWRAP, USER).isValid,
+          ).toBe(true);
         });
       }
     } else {
@@ -146,7 +156,9 @@ describe(`ERC4626 exhaustive coverage — all ${allowedVaults.length} allowed va
             value: '0x0',
             chainId: vault.chainId,
           });
-          expect(validator.validate(tx, TransactionType.SUPPLY, USER).isValid).toBe(false);
+          expect(
+            validator.validate(tx, TransactionType.SUPPLY, USER).isValid,
+          ).toBe(false);
         });
       }
 
@@ -163,7 +175,9 @@ describe(`ERC4626 exhaustive coverage — all ${allowedVaults.length} allowed va
             value: '0x0',
             chainId: vault.chainId,
           });
-          expect(validator.validate(tx, TransactionType.WITHDRAW, USER).isValid).toBe(false);
+          expect(
+            validator.validate(tx, TransactionType.WITHDRAW, USER).isValid,
+          ).toBe(false);
         });
       }
     }

@@ -4,7 +4,7 @@ import { loadEmbeddedRegistry } from './vault-config';
 import { VaultInfo } from './types';
 import { TransactionType } from '../../../types';
 
-const { GENERIC_ERC4626_PROTOCOLS } = require('../../index');
+import { GENERIC_ERC4626_PROTOCOLS } from '../../index';
 
 const erc20Iface = new ethers.Interface([
   'function approve(address spender, uint256 amount) returns (bool)',
@@ -126,78 +126,78 @@ describe('ERC4626 protocol coverage — real vaults from embedded registry', () 
 });
 
 describe('WETH vault coverage', () => {
-    const wethVault = config.vaults.find(
-      (v) =>
-        v.isWethVault === true &&
-        v.canEnter !== false &&
-        v.canExit !== false &&
-        GENERIC_ERC4626_PROTOCOLS.has(v.protocol) &&
-        WETH_ADDRESSES[v.chainId],
-    );
-  
-    it('should have at least one WETH vault in the registry', () => {
-      expect(wethVault).toBeDefined();
+  const wethVault = config.vaults.find(
+    (v) =>
+      v.isWethVault === true &&
+      v.canEnter !== false &&
+      v.canExit !== false &&
+      GENERIC_ERC4626_PROTOCOLS.has(v.protocol) &&
+      WETH_ADDRESSES[v.chainId],
+  );
+
+  it('should have at least one WETH vault in the registry', () => {
+    expect(wethVault).toBeDefined();
+  });
+
+  if (wethVault) {
+    const wethAddr = WETH_ADDRESSES[wethVault.chainId];
+    const validator = new ERC4626Validator({
+      vaults: [wethVault],
+      lastUpdated: config.lastUpdated,
     });
-  
-    if (wethVault) {
-      const wethAddr = WETH_ADDRESSES[wethVault.chainId];
-      const validator = new ERC4626Validator({
-        vaults: [wethVault],
-        lastUpdated: config.lastUpdated,
+
+    it(`WRAP: WETH deposit() — ${wethVault.protocol} on ${wethVault.network}`, () => {
+      const data = wethIface.encodeFunctionData('deposit', []);
+      const tx = buildTx({
+        to: wethAddr,
+        data,
+        value: '0xde0b6b3a7640000',
+        chainId: wethVault.chainId,
       });
-  
-      it(`WRAP: WETH deposit() — ${wethVault.protocol} on ${wethVault.network}`, () => {
-        const data = wethIface.encodeFunctionData('deposit', []);
-        const tx = buildTx({
-          to: wethAddr,
-          data,
-          value: '0xde0b6b3a7640000',
-          chainId: wethVault.chainId,
-        });
-        const result = validator.validate(tx, TransactionType.WRAP, USER);
-        expect(result.isValid).toBe(true);
+      const result = validator.validate(tx, TransactionType.WRAP, USER);
+      expect(result.isValid).toBe(true);
+    });
+
+    it(`UNWRAP: WETH withdraw(amount) — ${wethVault.protocol} on ${wethVault.network}`, () => {
+      const data = wethIface.encodeFunctionData('withdraw', [
+        ethers.parseEther('1'),
+      ]);
+      const tx = buildTx({
+        to: wethAddr,
+        data,
+        value: '0x0',
+        chainId: wethVault.chainId,
       });
-  
-      it(`UNWRAP: WETH withdraw(amount) — ${wethVault.protocol} on ${wethVault.network}`, () => {
-        const data = wethIface.encodeFunctionData('withdraw', [
-          ethers.parseEther('1'),
-        ]);
-        const tx = buildTx({
-          to: wethAddr,
-          data,
-          value: '0x0',
-          chainId: wethVault.chainId,
-        });
-        const result = validator.validate(tx, TransactionType.UNWRAP, USER);
-        expect(result.isValid).toBe(true);
+      const result = validator.validate(tx, TransactionType.UNWRAP, USER);
+      expect(result.isValid).toBe(true);
+    });
+  }
+});
+
+describe('cross-protocol isolation', () => {
+  const protocols = Array.from(sampleByProtocol.entries());
+  if (protocols.length >= 2) {
+    const [, vaultA] = protocols[0];
+    const [, vaultB] = protocols[1];
+
+    const validatorA = new ERC4626Validator({
+      vaults: [vaultA],
+      lastUpdated: config.lastUpdated,
+    });
+
+    it(`deposit to ${vaultB.protocol} vault should be rejected by ${vaultA.protocol} validator`, () => {
+      const data = erc4626Iface.encodeFunctionData('deposit', [
+        ethers.parseUnits('100', 18),
+        USER,
+      ]);
+      const tx = buildTx({
+        to: vaultB.address,
+        data,
+        value: '0x0',
+        chainId: vaultB.chainId,
       });
-    }
-  });
-  
-  describe('cross-protocol isolation', () => {
-    const protocols = Array.from(sampleByProtocol.entries());
-    if (protocols.length >= 2) {
-      const [, vaultA] = protocols[0];
-      const [, vaultB] = protocols[1];
-  
-      const validatorA = new ERC4626Validator({
-        vaults: [vaultA],
-        lastUpdated: config.lastUpdated,
-      });
-  
-      it(`deposit to ${vaultB.protocol} vault should be rejected by ${vaultA.protocol} validator`, () => {
-        const data = erc4626Iface.encodeFunctionData('deposit', [
-          ethers.parseUnits('100', 18),
-          USER,
-        ]);
-        const tx = buildTx({
-          to: vaultB.address,
-          data,
-          value: '0x0',
-          chainId: vaultB.chainId,
-        });
-        const result = validatorA.validate(tx, TransactionType.SUPPLY, USER);
-        expect(result.isValid).toBe(false);
-      });
-    }
-  });
+      const result = validatorA.validate(tx, TransactionType.SUPPLY, USER);
+      expect(result.isValid).toBe(false);
+    });
+  }
+});

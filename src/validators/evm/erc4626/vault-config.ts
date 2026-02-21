@@ -10,6 +10,8 @@ interface RegistryEntry {
   inputTokenAddress: string;
   vaultTokenAddress: string;
   isWethVault: boolean;
+  canEnter?: boolean;
+  canExit?: boolean;
 }
 
 interface VaultRegistry {
@@ -21,7 +23,7 @@ interface VaultRegistry {
 export function loadEmbeddedRegistry(): VaultConfiguration {
   const registry = registryData as VaultRegistry;
 
-  const vaults: VaultInfo [] = registry.vaults.map((entry) => ({
+  const vaults: VaultInfo[] = registry.vaults.map((entry) => ({
     address: entry.address.toLowerCase(),
     chainId: entry.chainId,
     protocol: entry.protocol,
@@ -30,6 +32,8 @@ export function loadEmbeddedRegistry(): VaultConfiguration {
     vaultTokenAddress: entry.vaultTokenAddress.toLowerCase(),
     network: entry.network,
     isWethVault: entry.isWethVault,
+    canEnter: entry.canEnter,
+    canExit: entry.canExit,
   }));
 
   return {
