@@ -360,7 +360,7 @@ describe('ERC4626Validator', () => {
       expect(result.reason).toContain('Receiver address does not match');
     });
 
-    it('should reject ETH value on non-WETH vault', () => {
+    it('should reject ETH value on supply', () => {
       const data = erc4626Iface.encodeFunctionData('deposit', [
         ethers.parseUnits('1000', 6),
         USER_ADDRESS,
@@ -376,7 +376,7 @@ describe('ERC4626Validator', () => {
         USER_ADDRESS,
       );
       expect(result.isValid).toBe(false);
-      expect(result.reason).toContain('should not send ETH to non-WETH vault');
+      expect(result.reason).toContain('should not send ETH');
     });
 
     it('should reject tampered calldata (receiver swapped after encoding)', () => {
@@ -467,7 +467,7 @@ describe('ERC4626Validator', () => {
       expect(result.isValid).toBe(false);
     });
 
-    it('should accept SUPPLY to WETH vault with ETH value', () => {
+    it('should reject ETH value on WETH vault (wrapping is a separate step)', () => {
       const data = erc4626Iface.encodeFunctionData('deposit', [
         ethers.parseEther('1'),
         USER_ADDRESS,
@@ -475,14 +475,15 @@ describe('ERC4626Validator', () => {
       const tx = buildTx({
         to: WETH_VAULT_ADDRESS,
         data,
-        value: '0xde0b6b3a7640000', // 1 ETH
+        value: '0xde0b6b3a7640000',
       });
       const result = validator.validate(
         tx,
         TransactionType.SUPPLY,
         USER_ADDRESS,
       );
-      expect(result.isValid).toBe(true);
+      expect(result.isValid).toBe(false);
+      expect(result.reason).toContain('should not send ETH');
     });
 
     it('should reject zero-amount deposit', () => {

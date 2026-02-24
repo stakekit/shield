@@ -48,12 +48,10 @@ export class ERC4626Validator extends BaseEVMValidator {
   private static readonly erc4626Interface = new ethers.Interface(ERC4626_ABI);
   private static readonly erc20Interface = new ethers.Interface(ERC20_ABI);
   private static readonly wethInterface = new ethers.Interface(WETH_ABI);
-  private vaultsByChain: Map<number, Set<string>>; // chainId -> Set of vault addresses
   private vaultInfoMap: Map<string, VaultInfo>; // "chainId:address" -> VaultInfo
 
   constructor(vaultConfig: VaultConfiguration) {
     super();
-    this.vaultsByChain = new Map();
     this.vaultInfoMap = new Map();
     this.loadConfiguration(vaultConfig);
   }
@@ -66,15 +64,13 @@ export class ERC4626Validator extends BaseEVMValidator {
     for (const vault of config.vaults) {
       const chainId = vault.chainId;
       const address = vault.address.toLowerCase();
-
-      // Add to chain-based lookup
-      if (!this.vaultsByChain.has(chainId)) {
-        this.vaultsByChain.set(chainId, new Set());
-      }
-      this.vaultsByChain.get(chainId)!.add(address);
-
-      // Add to info map
-      this.vaultInfoMap.set(`${chainId}:${address}`, vault);
+      const normalizedVault = {
+        ...vault,
+        address,
+        inputTokenAddress: vault.inputTokenAddress.toLowerCase(),
+        vaultTokenAddress: vault.vaultTokenAddress.toLowerCase(),
+      };
+      this.vaultInfoMap.set(`${chainId}:${address}`, normalizedVault);
     }
   }
 
@@ -122,7 +118,7 @@ export class ERC4626Validator extends BaseEVMValidator {
     // Route to appropriate validation based on transaction type
     switch (transactionType) {
       case TransactionType.APPROVAL:
-        return this.validateApproval(tx, userAddress, chainId);
+        return this.validateApproval(tx, chainId);
       case TransactionType.WRAP:
         return this.validateWrap(tx, chainId);
       case TransactionType.SUPPLY:
@@ -143,7 +139,6 @@ export class ERC4626Validator extends BaseEVMValidator {
    */
   private validateApproval(
     tx: EVMTransaction,
-    userAddress: string,
     chainId: number,
   ): ValidationResult {
     // APPROVAL should not send ETH
@@ -175,18 +170,16 @@ export class ERC4626Validator extends BaseEVMValidator {
     const [spender, amount] = parsed.args;
 
     // Validate spender is a whitelisted vault
-    if (!this.isVaultAllowed(chainId, spender)) {
+    const vaultInfo = this.vaultInfoMap.get(
+      `${chainId}:${spender.toLowerCase()}`,
+    );
+    if (!vaultInfo) {
       return this.blocked('Approval spender is not a whitelisted vault', {
         spender,
         chainId,
       });
     }
-
-    // After confirming spender is a whitelisted vault, verify tx.to is the vault's input token
-    const vaultInfo = this.vaultInfoMap.get(
-      `${chainId}:${spender.toLowerCase()}`,
-    );
-    if (vaultInfo && tx.to?.toLowerCase() !== vaultInfo.inputTokenAddress) {
+    if (tx.to?.toLowerCase() !== vaultInfo.inputTokenAddress) {
       return this.blocked('Approval token does not match vault input token', {
         expected: vaultInfo.inputTokenAddress,
         actual: tx.to,
@@ -263,46 +256,22 @@ export class ERC4626Validator extends BaseEVMValidator {
     userAddress: string,
     chainId: number,
   ): ValidationResult {
-    // Validate vault address is whitelisted
-    const vaultAddress = tx.to?.toLowerCase();
-    if (!vaultAddress) {
-      return this.blocked('Transaction has no destination address');
-    }
-
-    if (!this.isVaultAllowed(chainId, vaultAddress)) {
-      return this.blocked('Vault address not whitelisted', {
-        vaultAddress,
-        chainId,
-      });
-    }
-
-    // Get vault info (keyed by chainId:address)
-    const vaultInfo = this.vaultInfoMap.get(`${chainId}:${vaultAddress}`);
-    if (!vaultInfo) {
-      return this.blocked('Vault info not found', { vaultAddress });
-    }
-
-    // Verify chain ID matches vault's registered chain
-    if (vaultInfo.chainId !== chainId) {
-      return this.blocked('Transaction chain ID does not match vault chain', {
-        expectedChainId: vaultInfo.chainId,
-        actualChainId: chainId,
-        vaultAddress,
-      });
-    }
+    const resolved = this.resolveVault(tx, chainId);
+    if ('error' in resolved) return resolved.error;
+    const { vaultInfo } = resolved;
 
     // Check if vault deposits are paused
     if (vaultInfo.canEnter === false) {
       return this.blocked('Vault deposits are currently paused', {
-        vaultAddress,
+        vaultAddress: tx.to,
         chainId,
       });
     }
 
-    // Validate no value sent (unless WETH vault - rare case)
+    // Validate no value sent
     const value = BigInt(tx.value ?? '0');
-    if (value > 0n && !vaultInfo.isWethVault) {
-      return this.blocked('Transaction should not send ETH to non-WETH vault', {
+    if (value > 0n) {
+      return this.blocked('Supply transaction should not send ETH', {
         value: value.toString(),
       });
     }
@@ -350,38 +319,14 @@ export class ERC4626Validator extends BaseEVMValidator {
     userAddress: string,
     chainId: number,
   ): ValidationResult {
-    // Validate vault address is whitelisted
-    const vaultAddress = tx.to?.toLowerCase();
-    if (!vaultAddress) {
-      return this.blocked('Transaction has no destination address');
-    }
-
-    if (!this.isVaultAllowed(chainId, vaultAddress)) {
-      return this.blocked('Vault address not whitelisted', {
-        vaultAddress,
-        chainId,
-      });
-    }
-
-    // Get vault info (keyed by chainId:address)
-    const vaultInfo = this.vaultInfoMap.get(`${chainId}:${vaultAddress}`);
-    if (!vaultInfo) {
-      return this.blocked('Vault info not found', { vaultAddress });
-    }
-
-    // Verify chain ID matches vault's registered chain
-    if (vaultInfo.chainId !== chainId) {
-      return this.blocked('Transaction chain ID does not match vault chain', {
-        expectedChainId: vaultInfo.chainId,
-        actualChainId: chainId,
-        vaultAddress,
-      });
-    }
+    const resolved = this.resolveVault(tx, chainId);
+    if ('error' in resolved) return resolved.error;
+    const { vaultInfo } = resolved;
 
     // Check if vault withdrawals are disabled
     if (vaultInfo.canExit === false) {
       return this.blocked('Vault withdrawals are currently disabled', {
-        vaultAddress,
+        vaultAddress: tx.to,
         chainId,
       });
     }
@@ -502,15 +447,35 @@ export class ERC4626Validator extends BaseEVMValidator {
     return this.safe();
   }
 
-  /**
-   * Check if vault is whitelisted for a chain
-   */
-  private isVaultAllowed(chainId: number, vaultAddress: string): boolean {
-    const vaultsForChain = this.vaultsByChain.get(chainId);
-    if (!vaultsForChain) {
-      return false;
+  private resolveVault(
+    tx: EVMTransaction,
+    chainId: number,
+  ): { vaultInfo: VaultInfo } | { error: ValidationResult } {
+    const vaultAddress = tx.to?.toLowerCase();
+    if (!vaultAddress) {
+      return { error: this.blocked('Transaction has no destination address') };
     }
-    return vaultsForChain.has(vaultAddress.toLowerCase());
+
+    if (!this.vaultInfoMap.has(`${chainId}:${vaultAddress}`)) {
+      return {
+        error: this.blocked('Vault address not whitelisted', {
+          vaultAddress,
+          chainId,
+        }),
+      };
+    }
+
+    const vaultInfo = this.vaultInfoMap.get(`${chainId}:${vaultAddress}`);
+    if (!vaultInfo) {
+      return {
+        error: this.blocked('Vault address not whitelisted', {
+          vaultAddress,
+          chainId,
+        }),
+      };
+    }
+
+    return { vaultInfo };
   }
 
   /**
@@ -523,11 +488,6 @@ export class ERC4626Validator extends BaseEVMValidator {
       42161: '0x82af49447d8a07e3bd95bd0d56f35241523fbab1', // Arbitrum
       10: '0x4200000000000000000000000000000000000006', // Optimism
       8453: '0x4200000000000000000000000000000000000006', // Base
-      137: '0x7ceb23fd6bc0add59e62ac25578270cff1b9f619', // Polygon
-      100: '0x6a023ccd1ff6f2045c3309768ead9e68f978f6e1', // Gnosis
-      43114: '0x49d5c2bdffac6ce2bfdb6640f4f80f226bc10bab', // Avalanche
-      56: '0x2170ed0880ac9a755fd29b2688956bd959f933f8', // Binance
-      146: '0x50c42dEAcD8Fc9773493ED674b675bE577f2634b', // Sonic
       130: '0x4200000000000000000000000000000000000006', // Unichain
     };
 
