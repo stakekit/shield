@@ -67,8 +67,13 @@ export class ERC4626Validator extends BaseEVMValidator {
     for (const vault of config.vaults) {
       const chainId = vault.chainId;
       const address = vault.address.toLowerCase();
-      // Add to info map
-      this.vaultInfoMap.set(`${chainId}:${address}`, vault);
+      const normalizedVault = {
+        ...vault,
+        address,
+        inputTokenAddress: vault.inputTokenAddress.toLowerCase(),
+        vaultTokenAddress: vault.vaultTokenAddress.toLowerCase(),
+      };
+      this.vaultInfoMap.set(`${chainId}:${address}`, normalizedVault);
     }
   }
 
@@ -251,7 +256,7 @@ export class ERC4626Validator extends BaseEVMValidator {
       });
     }
 
-    // Validate no value sent (unless WETH vault)
+    // Validate no value sent
     const value = BigInt(tx.value ?? '0');
     if (value > 0n) {
       return this.blocked('Supply transaction should not send ETH', {
@@ -453,12 +458,6 @@ export class ERC4626Validator extends BaseEVMValidator {
       42161: '0x82af49447d8a07e3bd95bd0d56f35241523fbab1', // Arbitrum
       10: '0x4200000000000000000000000000000000000006', // Optimism
       8453: '0x4200000000000000000000000000000000000006', // Base
-      137: '0x7ceb23fd6bc0add59e62ac25578270cff1b9f619', // Polygon
-      100: '0x6a023ccd1ff6f2045c3309768ead9e68f978f6e1', // Gnosis
-      43114: '0x49d5c2bdffac6ce2bfdb6640f4f80f226bc10bab', // Avalanche
-      56: '0x2170ed0880ac9a755fd29b2688956bd959f933f8', // Binance
-      146: '0x50c42dEAcD8Fc9773493ED674b675bE577f2634b', // Sonic
-      130: '0x4200000000000000000000000000000000000006', // Unichain
     };
 
     return WETH_ADDRESSES[chainId] || null;
