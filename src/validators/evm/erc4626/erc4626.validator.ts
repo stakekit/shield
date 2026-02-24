@@ -412,7 +412,6 @@ export class ERC4626Validator extends BaseEVMValidator {
     return this.safe();
   }
 
-
   private resolveVault(
     tx: EVMTransaction,
     chainId: number,
@@ -421,7 +420,7 @@ export class ERC4626Validator extends BaseEVMValidator {
     if (!vaultAddress) {
       return { error: this.blocked('Transaction has no destination address') };
     }
-  
+
     if (!this.vaultInfoMap.has(`${chainId}:${vaultAddress}`)) {
       return {
         error: this.blocked('Vault address not whitelisted', {
@@ -430,7 +429,7 @@ export class ERC4626Validator extends BaseEVMValidator {
         }),
       };
     }
-  
+
     const vaultInfo = this.vaultInfoMap.get(`${chainId}:${vaultAddress}`);
     if (!vaultInfo) {
       return {
@@ -440,7 +439,7 @@ export class ERC4626Validator extends BaseEVMValidator {
         }),
       };
     }
-  
+
     return { vaultInfo };
   }
 

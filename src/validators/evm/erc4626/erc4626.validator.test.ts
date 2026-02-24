@@ -477,7 +477,11 @@ describe('ERC4626Validator', () => {
         data,
         value: '0xde0b6b3a7640000',
       });
-      const result = validator.validate(tx, TransactionType.SUPPLY, USER_ADDRESS);
+      const result = validator.validate(
+        tx,
+        TransactionType.SUPPLY,
+        USER_ADDRESS,
+      );
       expect(result.isValid).toBe(false);
       expect(result.reason).toContain('should not send ETH');
     });
