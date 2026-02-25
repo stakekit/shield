@@ -7,6 +7,8 @@ import {
 } from '../../../types';
 import { BaseEVMValidator, EVMTransaction } from '../base.validator';
 import { VaultInfo, VaultConfiguration } from './types';
+import { WETH_ADDRESSES } from './constants';
+
 
 /**
  * Standard ERC4626 ABI - only the functions we need to validate
@@ -483,14 +485,6 @@ export class ERC4626Validator extends BaseEVMValidator {
    *
    */
   private getWethAddress(chainId: number): string | null {
-    const WETH_ADDRESSES: Record<number, string> = {
-      1: '0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2', // Ethereum
-      42161: '0x82af49447d8a07e3bd95bd0d56f35241523fbab1', // Arbitrum
-      10: '0x4200000000000000000000000000000000000006', // Optimism
-      8453: '0x4200000000000000000000000000000000000006', // Base
-      130: '0x4200000000000000000000000000000000000006', // Unichain
-    };
-
     return WETH_ADDRESSES[chainId] || null;
   }
 }

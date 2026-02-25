@@ -2,6 +2,7 @@ import { ethers } from 'ethers';
 import { ERC4626Validator } from './erc4626.validator';
 import { loadEmbeddedRegistry } from './vault-config';
 import { TransactionType } from '../../../types';
+import { WETH_ADDRESSES } from './constants';
 
 import { GENERIC_ERC4626_PROTOCOLS } from '../../index';
 
@@ -16,19 +17,6 @@ const wethIface = new ethers.Interface([
   'function deposit() payable',
   'function withdraw(uint256 wad)',
 ]);
-
-const WETH_ADDRESSES: Record<number, string> = {
-  1: '0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2',
-  42161: '0x82af49447d8a07e3bd95bd0d56f35241523fbab1',
-  10: '0x4200000000000000000000000000000000000006',
-  8453: '0x4200000000000000000000000000000000000006',
-  137: '0x7ceb23fd6bc0add59e62ac25578270cff1b9f619',
-  100: '0x6a023ccd1ff6f2045c3309768ead9e68f978f6e1',
-  43114: '0x49d5c2bdffac6ce2bfdb6640f4f80f226bc10bab',
-  56: '0x2170ed0880ac9a755fd29b2688956bd959f933f8',
-  146: '0x50c42deacd8fc9773493ed674b675be577f2634b',
-  130: '0x4200000000000000000000000000000000000006',
-};
 
 const USER = '0x742d35cc6634c0532925a3b844bc9e7595f0beb8';
 
