@@ -890,4 +890,105 @@ describe('ERC4626Validator', () => {
       expect(matches).toEqual([TransactionType.UNWRAP]);
     });
   });
+
+  // =========================================================================
+  // WETH vault gating (per-vault instance behavior)
+  // =========================================================================
+  describe('WETH vault gating', () => {
+    // Non-WETH single-vault instance (simulates per-yield registration)
+    const nonWethValidator = new ERC4626Validator({
+      vaults: [
+        {
+          address: VAULT_ADDRESS.toLowerCase(),
+          chainId: CHAIN_ID,
+          protocol: 'euler',
+          yieldId: 'arbitrum-usdc-euler-vault',
+          inputTokenAddress: INPUT_TOKEN.toLowerCase(),
+          vaultTokenAddress: VAULT_ADDRESS.toLowerCase(),
+          network: 'arbitrum',
+          isWethVault: false,
+          canEnter: true,
+          canExit: true,
+        },
+      ],
+      lastUpdated: Date.now(),
+    });
+
+    // WETH single-vault instance
+    const wethValidator = new ERC4626Validator({
+      vaults: [
+        {
+          address: WETH_VAULT_ADDRESS.toLowerCase(),
+          chainId: CHAIN_ID,
+          protocol: 'euler',
+          yieldId: 'arbitrum-weth-euler-vault',
+          inputTokenAddress: WETH_ARBITRUM.toLowerCase(),
+          vaultTokenAddress: WETH_VAULT_ADDRESS.toLowerCase(),
+          network: 'arbitrum',
+          isWethVault: true,
+          canEnter: true,
+          canExit: true,
+        },
+      ],
+      lastUpdated: Date.now(),
+    });
+
+    it('should reject WRAP when validator has no WETH vaults', () => {
+      const data = wethIface.encodeFunctionData('deposit', []);
+      const tx = buildTx({
+        to: WETH_ARBITRUM,
+        data,
+        value: '0xde0b6b3a7640000',
+      });
+      const result = nonWethValidator.validate(
+        tx,
+        TransactionType.WRAP,
+        USER_ADDRESS,
+      );
+      expect(result.isValid).toBe(false);
+      expect(result.reason).toContain('No WETH vaults registered');
+    });
+
+    it('should reject UNWRAP when validator has no WETH vaults', () => {
+      const data = wethIface.encodeFunctionData('withdraw', [
+        ethers.parseEther('1'),
+      ]);
+      const tx = buildTx({ to: WETH_ARBITRUM, data, value: '0x0' });
+      const result = nonWethValidator.validate(
+        tx,
+        TransactionType.UNWRAP,
+        USER_ADDRESS,
+      );
+      expect(result.isValid).toBe(false);
+      expect(result.reason).toContain('No WETH vaults registered');
+    });
+
+    it('should accept WRAP when validator has a WETH vault', () => {
+      const data = wethIface.encodeFunctionData('deposit', []);
+      const tx = buildTx({
+        to: WETH_ARBITRUM,
+        data,
+        value: '0xde0b6b3a7640000',
+      });
+      const result = wethValidator.validate(
+        tx,
+        TransactionType.WRAP,
+        USER_ADDRESS,
+      );
+      expect(result.isValid).toBe(true);
+    });
+
+    it('should accept UNWRAP when validator has a WETH vault', () => {
+      const data = wethIface.encodeFunctionData('withdraw', [
+        ethers.parseEther('1'),
+      ]);
+      const tx = buildTx({ to: WETH_ARBITRUM, data, value: '0x0' });
+      const result = wethValidator.validate(
+        tx,
+        TransactionType.UNWRAP,
+        USER_ADDRESS,
+      );
+      expect(result.isValid).toBe(true);
+    });
+  });
 });

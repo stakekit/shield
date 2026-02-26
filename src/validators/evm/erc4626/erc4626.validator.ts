@@ -7,6 +7,8 @@ import {
 } from '../../../types';
 import { BaseEVMValidator, EVMTransaction } from '../base.validator';
 import { VaultInfo, VaultConfiguration } from './types';
+import { WETH_ADDRESSES } from './constants';
+
 
 /**
  * Standard ERC4626 ABI - only the functions we need to validate
@@ -45,16 +47,13 @@ const WETH_ABI = [
  * - UNWRAP: Convert WETH to native ETH (optional, for WETH vaults)
  */
 export class ERC4626Validator extends BaseEVMValidator {
-  private readonly erc4626Interface: ethers.Interface;
-  private readonly erc20Interface: ethers.Interface;
-  private readonly wethInterface: ethers.Interface;
+  private static readonly erc4626Interface = new ethers.Interface(ERC4626_ABI);
+  private static readonly erc20Interface = new ethers.Interface(ERC20_ABI);
+  private static readonly wethInterface = new ethers.Interface(WETH_ABI);
   private vaultInfoMap: Map<string, VaultInfo>; // "chainId:address" -> VaultInfo
 
   constructor(vaultConfig: VaultConfiguration) {
     super();
-    this.erc4626Interface = new ethers.Interface(ERC4626_ABI);
-    this.erc20Interface = new ethers.Interface(ERC20_ABI);
-    this.wethInterface = new ethers.Interface(WETH_ABI);
     this.vaultInfoMap = new Map();
     this.loadConfiguration(vaultConfig);
   }
@@ -153,7 +152,10 @@ export class ERC4626Validator extends BaseEVMValidator {
     }
 
     // Parse the approval calldata
-    const result = this.parseAndValidateCalldata(tx, this.erc20Interface);
+    const result = this.parseAndValidateCalldata(
+      tx,
+      ERC4626Validator.erc20Interface,
+    );
     if ('error' in result) return result.error;
 
     const { parsed } = result;
@@ -205,6 +207,15 @@ export class ERC4626Validator extends BaseEVMValidator {
       return this.blocked('WETH address not configured for chain', { chainId });
     }
 
+    const hasWethVault = Array.from(this.vaultInfoMap.values()).some(
+      (v) => v.chainId === chainId && v.isWethVault === true,
+    );
+    if (!hasWethVault) {
+      return this.blocked('No WETH vaults registered for this yield', {
+        chainId,
+      });
+    }
+
     // Validate transaction is to WETH contract
     if (tx.to?.toLowerCase() !== wethAddress.toLowerCase()) {
       return this.blocked('WRAP transaction not to WETH contract', {
@@ -220,7 +231,10 @@ export class ERC4626Validator extends BaseEVMValidator {
     }
 
     // Parse the wrap calldata
-    const result = this.parseAndValidateCalldata(tx, this.wethInterface);
+    const result = this.parseAndValidateCalldata(
+      tx,
+      ERC4626Validator.wethInterface,
+    );
     if ('error' in result) return result.error;
 
     const { parsed } = result;
@@ -265,7 +279,10 @@ export class ERC4626Validator extends BaseEVMValidator {
     }
 
     // Parse the deposit calldata
-    const result = this.parseAndValidateCalldata(tx, this.erc4626Interface);
+    const result = this.parseAndValidateCalldata(
+      tx,
+      ERC4626Validator.erc4626Interface,
+    );
     if ('error' in result) return result.error;
 
     const { parsed } = result;
@@ -325,7 +342,10 @@ export class ERC4626Validator extends BaseEVMValidator {
     }
 
     // Parse the withdraw calldata
-    const result = this.parseAndValidateCalldata(tx, this.erc4626Interface);
+    const result = this.parseAndValidateCalldata(
+      tx,
+      ERC4626Validator.erc4626Interface,
+    );
     if ('error' in result) return result.error;
 
     const { parsed } = result;
@@ -377,6 +397,15 @@ export class ERC4626Validator extends BaseEVMValidator {
       return this.blocked('WETH address not configured for chain', { chainId });
     }
 
+    const hasWethVault = Array.from(this.vaultInfoMap.values()).some(
+      (v) => v.chainId === chainId && v.isWethVault === true,
+    );
+    if (!hasWethVault) {
+      return this.blocked('No WETH vaults registered for this yield', {
+        chainId,
+      });
+    }
+
     // Validate transaction is to WETH contract
     if (tx.to?.toLowerCase() !== wethAddress.toLowerCase()) {
       return this.blocked('UNWRAP transaction not to WETH contract', {
@@ -394,7 +423,10 @@ export class ERC4626Validator extends BaseEVMValidator {
     }
 
     // Parse the unwrap calldata
-    const result = this.parseAndValidateCalldata(tx, this.wethInterface);
+    const result = this.parseAndValidateCalldata(
+      tx,
+      ERC4626Validator.wethInterface,
+    );
     if ('error' in result) return result.error;
 
     const { parsed } = result;
@@ -453,14 +485,6 @@ export class ERC4626Validator extends BaseEVMValidator {
    *
    */
   private getWethAddress(chainId: number): string | null {
-    const WETH_ADDRESSES: Record<number, string> = {
-      1: '0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2', // Ethereum
-      42161: '0x82af49447d8a07e3bd95bd0d56f35241523fbab1', // Arbitrum
-      10: '0x4200000000000000000000000000000000000006', // Optimism
-      8453: '0x4200000000000000000000000000000000000006', // Base
-      130: '0x4200000000000000000000000000000000000006', // Unichain
-    };
-
     return WETH_ADDRESSES[chainId] || null;
   }
 }
