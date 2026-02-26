@@ -18,7 +18,6 @@ const wethIface = new ethers.Interface([
   'function withdraw(uint256 wad)',
 ]);
 
-
 const USER = '0x742d35cc6634c0532925a3b844bc9e7595f0beb8';
 
 function buildTx(fields: Record<string, unknown>): string {

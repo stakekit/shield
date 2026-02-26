@@ -9,7 +9,6 @@ import { BaseEVMValidator, EVMTransaction } from '../base.validator';
 import { VaultInfo, VaultConfiguration } from './types';
 import { WETH_ADDRESSES } from './constants';
 
-
 /**
  * Standard ERC4626 ABI - only the functions we need to validate
  */
