@@ -11,10 +11,50 @@ permissions:
 
 jobs:
   # ==========================================
-  # Job 1: Publish to NPM
+  # Job 1: Security Audit (gates all other jobs)
+  # ==========================================
+  security-audit:
+    name: Security Audit
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          fetch-depth: 0
+
+      - name: Verify tag is on main
+        run: |
+          git fetch origin main
+          if ! git merge-base --is-ancestor "${{ github.sha }}" origin/main; then
+            echo "::error::Tagged commit is not on main branch — aborting release"
+            exit 1
+          fi
+
+      - name: Setup Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: "22"
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@41ff72655975bd51cab0327fa583b6e92b6d3061
+        with:
+          version: 10.12.2
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Security audit
+        run: pnpm audit --audit-level=critical
+
+  # ==========================================
+  # Job 2: Publish to NPM
   # ==========================================
   publish:
     name: Publish to NPM
+    needs: security-audit
     runs-on: ubuntu-latest
     environment: production
     permissions:
@@ -25,7 +65,15 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
         with:
-          ref: main
+          fetch-depth: 0
+
+      - name: Verify tag is on main
+        run: |
+          git fetch origin main
+          if ! git merge-base --is-ancestor "${{ github.sha }}" origin/main; then
+            echo "::error::Tagged commit is not on main branch — aborting publish"
+            exit 1
+          fi
 
       - name: Setup Node.js
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
@@ -55,16 +103,16 @@ jobs:
         run: pnpm publish --access public --no-git-checks
 
   # ==========================================
-  # Job 2: Build binaries for all platforms
+  # Job 3: Build binaries for all platforms
   # ==========================================
   build-binaries:
     name: Build Binary (${{ matrix.platform }}-${{ matrix.arch }})
+    needs: security-audit
     runs-on: ${{ matrix.os }}
-    # SECURITY: Only grant write permission where needed
     permissions:
       contents: read
-      attestations: write # SECURITY: For artifact attestation
-      id-token: write # SECURITY: For OIDC signing
+      attestations: write
+      id-token: write
 
     strategy:
       matrix:
@@ -91,6 +139,7 @@ jobs:
 
       - name: Verify tag is on main
         run: |
+          git fetch origin main
           if ! git merge-base --is-ancestor "${{ github.sha }}" origin/main; then
             echo "::error::Tagged commit is not on main branch — aborting build"
             exit 1
@@ -130,10 +179,6 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      # SECURITY: Run audit before building
-      - name: Security audit
-        run: pnpm audit --audit-level=critical
-
       - name: Build TypeScript
         run: pnpm build
 
@@ -151,7 +196,6 @@ jobs:
         shell: bash
         run: mv shield.exe shield-windows-${{ matrix.arch }}.exe
 
-      # SECURITY: Generate SHA256 checksum for integrity verification
       - name: Generate checksum (Unix)
         if: matrix.platform != 'win32'
         run: |
@@ -166,14 +210,13 @@ jobs:
           "$($hash.Hash.ToLower())  shield-windows-${{ matrix.arch }}.exe" | Out-File -Encoding utf8 shield-windows-${{ matrix.arch }}.exe.sha256
           Get-Content shield-windows-${{ matrix.arch }}.exe.sha256
 
-      # SECURITY: Generate artifact attestation (proves binary was built by this workflow)
       - name: Generate artifact attestation
         uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be
         with:
           subject-path: "shield-*"
 
       - name: Upload artifacts
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: binary-${{ matrix.platform }}-${{ matrix.arch }}
           path: |
@@ -181,7 +224,7 @@ jobs:
             shield-${{ matrix.platform == 'win32' && 'windows' || matrix.platform }}-${{ matrix.arch }}${{ matrix.platform == 'win32' && '.exe' || '' }}.sha256
 
   # ==========================================
-  # Job 3: Create GitHub Release with all binaries
+  # Job 4: Create GitHub Release with all binaries
   # ==========================================
   create-release:
     name: Create GitHub Release
