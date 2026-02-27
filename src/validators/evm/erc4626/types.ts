@@ -12,6 +12,7 @@ export interface VaultInfo {
   isWethVault?: boolean; // Supports native ETH deposits
   canEnter?: boolean; // Whether deposits are enabled
   canExit?: boolean; // Whether withdrawals are enabled
+  allocatorVaults?: string[]; // Allocator vault addresses (ERC4626-compatible)
 }
 
 /**

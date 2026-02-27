@@ -72,6 +72,15 @@ export class ERC4626Validator extends BaseEVMValidator {
         vaultTokenAddress: vault.vaultTokenAddress.toLowerCase(),
       };
       this.vaultInfoMap.set(`${chainId}:${address}`, normalizedVault);
+      if (vault.allocatorVaults) {
+        for (const allocatorAddress of vault.allocatorVaults) {
+          const normalized = allocatorAddress.toLowerCase();
+          this.vaultInfoMap.set(`${chainId}:${normalized}`, {
+            ...normalizedVault,
+            address: normalized,
+          });
+        }
+      }
     }
   }
 

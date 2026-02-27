@@ -12,6 +12,7 @@ interface RegistryEntry {
   isWethVault: boolean;
   canEnter?: boolean;
   canExit?: boolean;
+  allocatorVaults?: string[];
 }
 
 interface VaultRegistry {
@@ -34,6 +35,7 @@ export function loadEmbeddedRegistry(): VaultConfiguration {
     isWethVault: entry.isWethVault,
     canEnter: entry.canEnter,
     canExit: entry.canExit,
+    allocatorVaults: entry.allocatorVaults?.map((a) => a.toLowerCase()),
   }));
 
   return {
