@@ -15,6 +15,7 @@ const WETH_ARBITRUM = '0x82aF49447D8a07e3bd95BD0d56f35241523fBab1';
 const WETH_VAULT_ADDRESS = '0xAABBCCDDEEFF00112233445566778899AABBCCDD';
 const MALICIOUS_ADDRESS = '0x000000000000000000000000000000000000bad1';
 const PAUSED_VAULT_ADDRESS = '0xDEAD000000000000000000000000000000000001';
+const ALLOCATOR_VAULT_ADDRESS = '0xa110ca7040000000000000000000000000000001';
 const CHAIN_ID = 42161; // Arbitrum
 
 // ---------------------------------------------------------------------------
@@ -78,6 +79,19 @@ const mockConfig: VaultConfiguration = {
       isWethVault: false,
       canEnter: false,
       canExit: false,
+    },
+    {
+      address: VAULT_ADDRESS.toLowerCase(),
+      chainId: CHAIN_ID,
+      protocol: 'morpho',
+      yieldId: 'arbitrum-usdc-morpho-oav-vault',
+      inputTokenAddress: INPUT_TOKEN.toLowerCase(),
+      vaultTokenAddress: VAULT_ADDRESS.toLowerCase(),
+      network: 'arbitrum',
+      isWethVault: false,
+      canEnter: true,
+      canExit: true,
+      allocatorVaults: [ALLOCATOR_VAULT_ADDRESS],
     },
   ],
   lastUpdated: Date.now(),
@@ -986,6 +1000,189 @@ describe('ERC4626Validator', () => {
       const result = wethValidator.validate(
         tx,
         TransactionType.UNWRAP,
+        USER_ADDRESS,
+      );
+      expect(result.isValid).toBe(true);
+    });
+  });
+    // =========================================================================
+  // Allocator vault (OAV) support
+  // =========================================================================
+  describe('allocator vault (OAV) transactions', () => {
+    const oavValidator = new ERC4626Validator({
+      vaults: [
+        {
+          address: VAULT_ADDRESS.toLowerCase(),
+          chainId: CHAIN_ID,
+          protocol: 'morpho',
+          yieldId: 'arbitrum-usdc-morpho-oav-vault',
+          inputTokenAddress: INPUT_TOKEN.toLowerCase(),
+          vaultTokenAddress: VAULT_ADDRESS.toLowerCase(),
+          network: 'arbitrum',
+          isWethVault: false,
+          canEnter: true,
+          canExit: true,
+          allocatorVaults: [ALLOCATOR_VAULT_ADDRESS],
+        },
+      ],
+      lastUpdated: Date.now(),
+    });
+
+    it('should validate SUPPLY (deposit) to allocator vault address', () => {
+      const data = erc4626Iface.encodeFunctionData('deposit', [
+        ethers.parseUnits('1000', 6),
+        USER_ADDRESS,
+      ]);
+      const tx = buildTx({ to: ALLOCATOR_VAULT_ADDRESS, data, value: '0x0' });
+      const result = oavValidator.validate(
+        tx,
+        TransactionType.SUPPLY,
+        USER_ADDRESS,
+      );
+      expect(result.isValid).toBe(true);
+    });
+
+    it('should validate SUPPLY (mint) to allocator vault address', () => {
+      const data = erc4626Iface.encodeFunctionData('mint', [
+        ethers.parseUnits('500', 18),
+        USER_ADDRESS,
+      ]);
+      const tx = buildTx({ to: ALLOCATOR_VAULT_ADDRESS, data, value: '0x0' });
+      const result = oavValidator.validate(
+        tx,
+        TransactionType.SUPPLY,
+        USER_ADDRESS,
+      );
+      expect(result.isValid).toBe(true);
+    });
+
+    it('should validate WITHDRAW (redeem) from allocator vault address', () => {
+      const data = erc4626Iface.encodeFunctionData(
+        'redeem(uint256,address,address)',
+        [ethers.parseUnits('500', 18), USER_ADDRESS, USER_ADDRESS],
+      );
+      const tx = buildTx({ to: ALLOCATOR_VAULT_ADDRESS, data, value: '0x0' });
+      const result = oavValidator.validate(
+        tx,
+        TransactionType.WITHDRAW,
+        USER_ADDRESS,
+      );
+      expect(result.isValid).toBe(true);
+    });
+
+    it('should validate WITHDRAW (withdraw) from allocator vault address', () => {
+      const data = erc4626Iface.encodeFunctionData(
+        'withdraw(uint256,address,address)',
+        [ethers.parseUnits('1000', 6), USER_ADDRESS, USER_ADDRESS],
+      );
+      const tx = buildTx({ to: ALLOCATOR_VAULT_ADDRESS, data, value: '0x0' });
+      const result = oavValidator.validate(
+        tx,
+        TransactionType.WITHDRAW,
+        USER_ADDRESS,
+      );
+      expect(result.isValid).toBe(true);
+    });
+
+    it('should validate APPROVAL with allocator vault as spender', () => {
+      const data = erc20Iface.encodeFunctionData('approve', [
+        ALLOCATOR_VAULT_ADDRESS,
+        ethers.parseUnits('1000', 6),
+      ]);
+      const tx = buildTx({ to: INPUT_TOKEN, data, value: '0x0' });
+      const result = oavValidator.validate(
+        tx,
+        TransactionType.APPROVAL,
+        USER_ADDRESS,
+      );
+      expect(result.isValid).toBe(true);
+    });
+
+    it('should still validate SUPPLY to the base vault address', () => {
+      const data = erc4626Iface.encodeFunctionData('deposit', [
+        ethers.parseUnits('1000', 6),
+        USER_ADDRESS,
+      ]);
+      const tx = buildTx({ to: VAULT_ADDRESS, data, value: '0x0' });
+      const result = oavValidator.validate(
+        tx,
+        TransactionType.SUPPLY,
+        USER_ADDRESS,
+      );
+      expect(result.isValid).toBe(true);
+    });
+
+    it('should reject SUPPLY to unknown address (not base vault or allocator)', () => {
+      const data = erc4626Iface.encodeFunctionData('deposit', [
+        ethers.parseUnits('1000', 6),
+        USER_ADDRESS,
+      ]);
+      const tx = buildTx({ to: MALICIOUS_ADDRESS, data, value: '0x0' });
+      const result = oavValidator.validate(
+        tx,
+        TransactionType.SUPPLY,
+        USER_ADDRESS,
+      );
+      expect(result.isValid).toBe(false);
+      expect(result.reason).toContain('not whitelisted');
+    });
+
+    it('should reject WITHDRAW from unknown address (not base vault or allocator)', () => {
+      const data = erc4626Iface.encodeFunctionData(
+        'redeem(uint256,address,address)',
+        [ethers.parseUnits('500', 18), USER_ADDRESS, USER_ADDRESS],
+      );
+      const tx = buildTx({ to: MALICIOUS_ADDRESS, data, value: '0x0' });
+      const result = oavValidator.validate(
+        tx,
+        TransactionType.WITHDRAW,
+        USER_ADDRESS,
+      );
+      expect(result.isValid).toBe(false);
+      expect(result.reason).toContain('not whitelisted');
+    });
+
+    it('allocator vault deposit should match exactly one type: SUPPLY', () => {
+      const allTypes = oavValidator.getSupportedTransactionTypes();
+      const data = erc4626Iface.encodeFunctionData('deposit', [
+        ethers.parseUnits('1000', 6),
+        USER_ADDRESS,
+      ]);
+      const tx = buildTx({ to: ALLOCATOR_VAULT_ADDRESS, data, value: '0x0' });
+
+      const matches = allTypes.filter(
+        (type) => oavValidator.validate(tx, type, USER_ADDRESS).isValid,
+      );
+      expect(matches).toEqual([TransactionType.SUPPLY]);
+    });
+
+    it('should work with no allocator vaults configured (field omitted)', () => {
+      const plainValidator = new ERC4626Validator({
+        vaults: [
+          {
+            address: VAULT_ADDRESS.toLowerCase(),
+            chainId: CHAIN_ID,
+            protocol: 'euler',
+            yieldId: 'arbitrum-usdc-euler-vault',
+            inputTokenAddress: INPUT_TOKEN.toLowerCase(),
+            vaultTokenAddress: VAULT_ADDRESS.toLowerCase(),
+            network: 'arbitrum',
+            isWethVault: false,
+            canEnter: true,
+            canExit: true,
+          },
+        ],
+        lastUpdated: Date.now(),
+      });
+
+      const data = erc4626Iface.encodeFunctionData('deposit', [
+        ethers.parseUnits('1000', 6),
+        USER_ADDRESS,
+      ]);
+      const tx = buildTx({ to: VAULT_ADDRESS, data, value: '0x0' });
+      const result = plainValidator.validate(
+        tx,
+        TransactionType.SUPPLY,
         USER_ADDRESS,
       );
       expect(result.isValid).toBe(true);
