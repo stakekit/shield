@@ -170,4 +170,67 @@ describe(`ERC4626 exhaustive coverage — all ${allowedVaults.length} allowed va
       }
     }
   }
+  const vaultsWithAllocators = allowedVaults.filter(
+    (v) => v.allocatorVaults && v.allocatorVaults.length > 0,
+  );
+
+  for (const vault of vaultsWithAllocators) {
+    const validator = new ERC4626Validator({
+      vaults: [vault],
+      lastUpdated: config.lastUpdated,
+    });
+
+    for (const allocAddr of vault.allocatorVaults!) {
+      const label = `${vault.protocol}/${vault.network} — ${vault.yieldId} → allocator ${allocAddr.slice(0, 10)}`;
+
+      it(`SUPPLY (allocator) — ${label}`, () => {
+        const data = erc4626Iface.encodeFunctionData('deposit', [
+          ethers.parseUnits('100', 18),
+          USER,
+        ]);
+        const tx = buildTx({
+          to: allocAddr,
+          data,
+          value: '0x0',
+          chainId: vault.chainId,
+        });
+        expect(
+          validator.validate(tx, TransactionType.SUPPLY, USER).isValid,
+        ).toBe(true);
+      });
+
+      it(`WITHDRAW (allocator) — ${label}`, () => {
+        const data = erc4626Iface.encodeFunctionData('redeem', [
+          ethers.parseUnits('50', 18),
+          USER,
+          USER,
+        ]);
+        const tx = buildTx({
+          to: allocAddr,
+          data,
+          value: '0x0',
+          chainId: vault.chainId,
+        });
+        expect(
+          validator.validate(tx, TransactionType.WITHDRAW, USER).isValid,
+        ).toBe(true);
+      });
+
+      it(`APPROVAL (allocator) — ${label}`, () => {
+        const data = erc20Iface.encodeFunctionData('approve', [
+          ethers.getAddress(allocAddr),
+          ethers.parseUnits('100', 18),
+        ]);
+        const tx = buildTx({
+          to: vault.inputTokenAddress,
+          data,
+          value: '0x0',
+          chainId: vault.chainId,
+        });
+        expect(
+          validator.validate(tx, TransactionType.APPROVAL, USER).isValid,
+        ).toBe(true);
+      });
+    }
+  }
 });

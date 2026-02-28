@@ -156,7 +156,7 @@ echo '{"apiVersion":"1.0","operation":"getSupportedYieldIds"}' | npx @yieldxyz/s
 - `ethereum-eth-lido-staking`
 - `solana-sol-native-multivalidator-staking`
 - `tron-trx-native-staking`
-- All generic ERC4626 vault yields from: Angle, Curve, Euler, Fluid, Gearbox, Idle Finance, Lista, Morpho, Sky, SummerFi, Yearn, Yo Protocol
+- All generic ERC4626 vault yields from: Angle, Curve, Euler, Fluid, Gearbox, Idle Finance, Lista, Morpho, Sky, SummerFi, Venus Flux, Yearn, Yo Protocol
 
 To see the full list:
 
@@ -237,7 +237,7 @@ Shield is designed with security as a top priority:
 
 ### Embedded Vault Registry
 
-ERC4626 vault data is embedded in the package at build time from `vault-registry.json`.
+ERC4626 vault data is embedded in the package at build time from `vault-registry.json`. The registry includes allocator vault (OAV) addresses for yields with fee configurations. Transactions targeting allocator vaults are validated using the same ERC4626 standard.
 
 ### Verifying Binary Integrity
 

@@ -43,6 +43,12 @@ describe('vault-registry.json integrity', () => {
       expect(vault.vaultTokenAddress).toBe(
         vault.vaultTokenAddress.toLowerCase(),
       );
+      if (vault.allocatorVaults) {
+        for (const addr of vault.allocatorVaults as string[]) {
+          expect(addr).toBe(addr.toLowerCase());
+          expect(addr.length).toBe(42);
+        }
+      }
     }
   });
 

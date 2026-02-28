@@ -26,6 +26,7 @@ export const GENERIC_ERC4626_PROTOCOLS = new Set([
   'morpho',
   'sky',
   'summer-fi',
+  'venus-flux',
   'yearn',
   'yo-protocol',
 ]);
