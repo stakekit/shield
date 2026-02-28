@@ -16,6 +16,7 @@ const WETH_VAULT_ADDRESS = '0xAABBCCDDEEFF00112233445566778899AABBCCDD';
 const MALICIOUS_ADDRESS = '0x000000000000000000000000000000000000bad1';
 const PAUSED_VAULT_ADDRESS = '0xDEAD000000000000000000000000000000000001';
 const ALLOCATOR_VAULT_ADDRESS = '0xa110ca7040000000000000000000000000000001';
+const MORPHO_VAULT_ADDRESS = '0x00000000000000000000000000000000000face2';
 const CHAIN_ID = 42161; // Arbitrum
 
 // ---------------------------------------------------------------------------
@@ -81,12 +82,12 @@ const mockConfig: VaultConfiguration = {
       canExit: false,
     },
     {
-      address: VAULT_ADDRESS.toLowerCase(),
+      address: MORPHO_VAULT_ADDRESS.toLowerCase(),
       chainId: CHAIN_ID,
       protocol: 'morpho',
       yieldId: 'arbitrum-usdc-morpho-oav-vault',
       inputTokenAddress: INPUT_TOKEN.toLowerCase(),
-      vaultTokenAddress: VAULT_ADDRESS.toLowerCase(),
+      vaultTokenAddress: MORPHO_VAULT_ADDRESS.toLowerCase(),
       network: 'arbitrum',
       isWethVault: false,
       canEnter: true,
