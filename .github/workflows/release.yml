@@ -26,6 +26,7 @@ jobs:
           fetch-depth: 0
 
       - name: Verify tag is on main
+        shell: bash
         run: |
           git fetch origin main
           if ! git merge-base --is-ancestor "${{ github.sha }}" origin/main; then
@@ -68,6 +69,7 @@ jobs:
           fetch-depth: 0
 
       - name: Verify tag is on main
+        shell: bash
         run: |
           git fetch origin main
           if ! git merge-base --is-ancestor "${{ github.sha }}" origin/main; then
@@ -138,6 +140,7 @@ jobs:
           fetch-depth: 0
 
       - name: Verify tag is on main
+        shell: bash
         run: |
           git fetch origin main
           if ! git merge-base --is-ancestor "${{ github.sha }}" origin/main; then
