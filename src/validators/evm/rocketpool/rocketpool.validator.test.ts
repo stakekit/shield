@@ -293,6 +293,113 @@ describe('RocketPoolValidator via Shield', () => {
       expect(result.isValid).toBe(false);
       expect(result.reason).toContain('No matching operation pattern found');
     });
+    it('should reject stake with zero minTokensOut', () => {
+      const zeroMinCalldata = iface.encodeFunctionData('swapTo', [
+        5000n,
+        5000n,
+        0n,
+        950000000000000000n,
+      ]);
+
+      const tx = {
+        to: rocketSwapRouterAddress,
+        from: userAddress,
+        value: '0xde0b6b3a7640000',
+        data: zeroMinCalldata,
+        nonce: 0,
+        gasLimit: '0x30d40',
+        gasPrice: '0x4a817c800',
+        chainId: 1,
+        type: 0,
+      };
+
+      const result = shield.validate({
+        yieldId,
+        unsignedTransaction: JSON.stringify(tx),
+        userAddress,
+      });
+
+      expect(result.isValid).toBe(false);
+      expect(result.reason).toContain('No matching operation pattern found');
+      const stakeAttempt = result.details?.attempts?.find(
+        (a: any) => a.type === TransactionType.STAKE,
+      );
+      expect(stakeAttempt?.reason).toContain(
+        'Minimum tokens out must be greater than zero',
+      );
+    });
+
+    it('should reject stake with zero idealTokensOut', () => {
+      const zeroIdealCalldata = iface.encodeFunctionData('swapTo', [
+        5000n,
+        5000n,
+        900000000000000000n,
+        0n,
+      ]);
+
+      const tx = {
+        to: rocketSwapRouterAddress,
+        from: userAddress,
+        value: '0xde0b6b3a7640000',
+        data: zeroIdealCalldata,
+        nonce: 0,
+        gasLimit: '0x30d40',
+        gasPrice: '0x4a817c800',
+        chainId: 1,
+        type: 0,
+      };
+
+      const result = shield.validate({
+        yieldId,
+        unsignedTransaction: JSON.stringify(tx),
+        userAddress,
+      });
+
+      expect(result.isValid).toBe(false);
+      expect(result.reason).toContain('No matching operation pattern found');
+      const stakeAttempt = result.details?.attempts?.find(
+        (a: any) => a.type === TransactionType.STAKE,
+      );
+      expect(stakeAttempt?.reason).toContain(
+        'Ideal tokens out must be greater than zero',
+      );
+    });
+
+    it('should reject stake where minTokensOut exceeds idealTokensOut', () => {
+      const invertedCalldata = iface.encodeFunctionData('swapTo', [
+        5000n,
+        5000n,
+        1000000000000000000n,
+        500000000000000000n,
+      ]);
+
+      const tx = {
+        to: rocketSwapRouterAddress,
+        from: userAddress,
+        value: '0xde0b6b3a7640000',
+        data: invertedCalldata,
+        nonce: 0,
+        gasLimit: '0x30d40',
+        gasPrice: '0x4a817c800',
+        chainId: 1,
+        type: 0,
+      };
+
+      const result = shield.validate({
+        yieldId,
+        unsignedTransaction: JSON.stringify(tx),
+        userAddress,
+      });
+
+      expect(result.isValid).toBe(false);
+      expect(result.reason).toContain('No matching operation pattern found');
+      const stakeAttempt = result.details?.attempts?.find(
+        (a: any) => a.type === TransactionType.STAKE,
+      );
+      expect(stakeAttempt?.reason).toContain(
+        'Minimum tokens out exceeds ideal tokens out',
+      );
+    });
   });
 
   describe('APPROVAL transactions', () => {
