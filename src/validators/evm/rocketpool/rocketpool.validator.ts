@@ -51,7 +51,8 @@ export class RocketPoolValidator extends BaseEVMValidator {
 
     // 3. Verify chainId == 1
     const chainErr = this.ensureChainIdEquals(
-      tx, 1,
+      tx,
+      1,
       'RocketPool only supported on Ethereum mainnet',
     );
     if (chainErr) return chainErr;
@@ -71,7 +72,10 @@ export class RocketPoolValidator extends BaseEVMValidator {
 
   private validateStake(tx: EVMTransaction): ValidationResult {
     // Verify target is RocketSwapRouter
-    if (tx.to?.toLowerCase() !== ROCKETPOOL_CONTRACTS.rocketSwapRouter.toLowerCase()) {
+    if (
+      tx.to?.toLowerCase() !==
+      ROCKETPOOL_CONTRACTS.rocketSwapRouter.toLowerCase()
+    ) {
       return this.blocked('Transaction not to RocketPool SwapRouter contract', {
         expected: ROCKETPOOL_CONTRACTS.rocketSwapRouter,
         actual: tx.to,
@@ -113,7 +117,7 @@ export class RocketPoolValidator extends BaseEVMValidator {
         idealTokensOut: BigInt(idealTokensOut).toString(),
       });
     }
-    
+
     return this.safe();
   }
 

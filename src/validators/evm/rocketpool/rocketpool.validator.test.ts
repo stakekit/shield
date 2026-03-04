@@ -7,8 +7,7 @@ describe('RocketPoolValidator via Shield', () => {
   const yieldId = 'ethereum-eth-reth-staking';
   const userAddress = '0x742d35cc6634c0532925a3b844bc9e7595f0beb8';
   const rETHAddress = '0xae78736Cd615f374D3085123A210448E74Fc6393';
-  const rocketSwapRouterAddress =
-    '0x16D5A408e807db8eF7c578279BEeEe6b228f1c1C';
+  const rocketSwapRouterAddress = '0x16D5A408e807db8eF7c578279BEeEe6b228f1c1C';
 
   const iface = new ethers.Interface([
     'function swapTo(uint256 _uniswapPortion, uint256 _balancerPortion, uint256 _minTokensOut, uint256 _idealTokensOut) payable',
@@ -501,9 +500,7 @@ describe('RocketPoolValidator via Shield', () => {
       const approvalAttempt = result.details?.attempts?.find(
         (a: any) => a.type === TransactionType.APPROVAL,
       );
-      expect(approvalAttempt?.reason).toContain(
-        'should not send ETH value',
-      );
+      expect(approvalAttempt?.reason).toContain('should not send ETH value');
     });
 
     it('should reject approval with zero amount', () => {
