@@ -33,8 +33,8 @@ describe('RocketPoolValidator via Shield', () => {
   const LIFI_PERMIT2_PROXY = '0x89c6340b1a1f4b25d36cd8b063d49045caf3f818';
 
   const lifiSwapIface = new ethers.Interface([
-    'function swapTokensGeneric(bytes32 _transactionId, string _integrator, string _referrer, address _receiver, uint256 _minAmount, (address callTo, address approveTo, address sendingAssetId, address receivingAssetId, uint256 fromAmount, bytes callData, bool requiresDeposit)[] _swapData) payable',
     'function swapTokensSingleV3ERC20ToERC20(bytes32 _transactionId, string _integrator, string _referrer, address _receiver, uint256 _minAmountOut, (address callTo, address approveTo, address sendingAssetId, address receivingAssetId, uint256 fromAmount, bytes callData, bool requiresDeposit) _swapData)',
+    'function swapTokensSingleV3ERC20ToNative(bytes32 _transactionId, string _integrator, string _referrer, address _receiver, uint256 _minAmountOut, (address callTo, address approveTo, address sendingAssetId, address receivingAssetId, uint256 fromAmount, bytes callData, bool requiresDeposit) _swapData)'
   ]);
 
   const permit2ProxyIface = new ethers.Interface([
@@ -54,14 +54,14 @@ describe('RocketPoolValidator via Shield', () => {
   ];
 
   const diamondSwapCalldata = lifiSwapIface.encodeFunctionData(
-    'swapTokensGeneric',
+    'swapTokensSingleV3ERC20ToNative',
     [
       ethers.zeroPadValue('0x01', 32),
       'stakekit',
       '',
       userAddress,
       900000000000000000n,
-      [sampleSwapDataTuple],
+      sampleSwapDataTuple,
     ],
   );
 
@@ -78,14 +78,14 @@ describe('RocketPoolValidator via Shield', () => {
   );
 
   const wrongReceiverSwapCalldata = lifiSwapIface.encodeFunctionData(
-    'swapTokensGeneric',
+    'swapTokensSingleV3ERC20ToNative',
     [
       ethers.zeroPadValue('0x01', 32),
       'stakekit',
       '',
       '0x0000000000000000000000000000000000000bad',
       900000000000000000n,
-      [sampleSwapDataTuple],
+      sampleSwapDataTuple,
     ],
   );
 
@@ -829,7 +829,7 @@ describe('RocketPoolValidator via Shield', () => {
   describe('SWAP transactions', () => {
     // --- Happy paths ---
 
-    it('should validate a direct Diamond swapTokensGeneric with matching receiver', () => {
+    it('should validate a direct Diamond swapTokensSingleV3ERC20ToNative with matching receiver', () => {
       const tx = {
         to: LIFI_DIAMOND,
         from: userAddress,
