@@ -14,7 +14,7 @@ describe('RocketPoolValidator via Shield', () => {
     'function approve(address spender, uint256 amount) returns (bool)',
   ]);
 
-  const lifiSpender = '0x1111111254EEB25477B68fb85Ed929f73A960582';
+  const lifiSpender = '0x1231DEB6f5749EF6cE6943a275A1D3E7486F4EaE'; // LI.FI Diamond
 
   const stakeCalldata = iface.encodeFunctionData('swapTo', [
     5000n,
@@ -27,6 +27,101 @@ describe('RocketPoolValidator via Shield', () => {
     lifiSpender,
     1000000000000000000n,
   ]);
+
+  // --- LI.FI SWAP test setup ---
+  const LIFI_DIAMOND = '0x1231deb6f5749ef6ce6943a275a1d3e7486f4eae';
+  const LIFI_PERMIT2_PROXY = '0x89c6340b1a1f4b25d36cd8b063d49045caf3f818';
+
+  const lifiSwapIface = new ethers.Interface([
+    'function swapTokensSingleV3ERC20ToERC20(bytes32 _transactionId, string _integrator, string _referrer, address _receiver, uint256 _minAmountOut, (address callTo, address approveTo, address sendingAssetId, address receivingAssetId, uint256 fromAmount, bytes callData, bool requiresDeposit) _swapData)',
+    'function swapTokensSingleV3ERC20ToNative(bytes32 _transactionId, string _integrator, string _referrer, address _receiver, uint256 _minAmountOut, (address callTo, address approveTo, address sendingAssetId, address receivingAssetId, uint256 fromAmount, bytes callData, bool requiresDeposit) _swapData)'
+  ]);
+
+  const permit2ProxyIface = new ethers.Interface([
+    'function callDiamondWithPermit2(bytes _diamondCalldata, ((address token, uint256 amount) permitted, uint256 nonce, uint256 deadline) _permit, bytes _signature) payable returns (bytes)',
+    'function callDiamondWithPermit2Witness(bytes _diamondCalldata, address _signer, ((address token, uint256 amount) permitted, uint256 nonce, uint256 deadline) _permit, bytes _signature) payable returns (bytes)',
+    'function callDiamondWithEIP2612Signature(address tokenAddress, uint256 amount, uint256 deadline, uint8 v, bytes32 r, bytes32 s, bytes diamondCalldata) payable returns (bytes)',
+  ]);
+
+  const sampleSwapDataTuple = [
+    '0x0000000000000000000000000000000000000001',
+    '0x0000000000000000000000000000000000000001',
+    rETHAddress,
+    '0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2',
+    1000000000000000000n,
+    '0x',
+    false,
+  ];
+
+  const diamondSwapCalldata = lifiSwapIface.encodeFunctionData(
+    'swapTokensSingleV3ERC20ToNative',
+    [
+      ethers.zeroPadValue('0x01', 32),
+      'stakekit',
+      '',
+      userAddress,
+      900000000000000000n,
+      sampleSwapDataTuple,
+    ],
+  );
+
+  const diamondSingleV3SwapCalldata = lifiSwapIface.encodeFunctionData(
+    'swapTokensSingleV3ERC20ToERC20',
+    [
+      ethers.zeroPadValue('0x02', 32),
+      'stakekit',
+      '',
+      userAddress,
+      900000000000000000n,
+      sampleSwapDataTuple,
+    ],
+  );
+
+  const wrongReceiverSwapCalldata = lifiSwapIface.encodeFunctionData(
+    'swapTokensSingleV3ERC20ToNative',
+    [
+      ethers.zeroPadValue('0x01', 32),
+      'stakekit',
+      '',
+      '0x0000000000000000000000000000000000000bad',
+      900000000000000000n,
+      sampleSwapDataTuple,
+    ],
+  );
+
+  const dummyPermit = [[rETHAddress, 1000000000000000000n], 0n, 9999999999n];
+  const dummySignature = '0x' + '00'.repeat(65);
+
+  const permit2WrappedSwapCalldata = permit2ProxyIface.encodeFunctionData(
+    'callDiamondWithPermit2',
+    [diamondSwapCalldata, dummyPermit, dummySignature],
+  );
+
+  const permit2WitnessWrappedSwapCalldata =
+    permit2ProxyIface.encodeFunctionData('callDiamondWithPermit2Witness', [
+      diamondSwapCalldata,
+      userAddress,
+      dummyPermit,
+      dummySignature,
+    ]);
+
+  const eip2612WrappedSwapCalldata = permit2ProxyIface.encodeFunctionData(
+    'callDiamondWithEIP2612Signature',
+    [
+      rETHAddress,
+      1000000000000000000n,
+      9999999999n,
+      27,
+      ethers.zeroPadValue('0x01', 32),
+      ethers.zeroPadValue('0x02', 32),
+      diamondSwapCalldata,
+    ],
+  );
+
+  const permit2WrongReceiverCalldata = permit2ProxyIface.encodeFunctionData(
+    'callDiamondWithPermit2',
+    [wrongReceiverSwapCalldata, dummyPermit, dummySignature],
+  );
 
   describe('isSupported', () => {
     it('should support ethereum-eth-reth-staking yield', () => {
@@ -639,7 +734,7 @@ describe('RocketPoolValidator via Shield', () => {
       expect(result.isValid).toBe(true);
     });
 
-    it('should accept approval with any spender address', () => {
+    it('should reject approval with unknown spender', () => {
       const randomSpender = '0xDeaDbeefdEAdbeefdEadbEEFdeadbeEFdEaDbeeF';
       const dynamicApproveCalldata = iface.encodeFunctionData('approve', [
         randomSpender,
@@ -664,7 +759,473 @@ describe('RocketPoolValidator via Shield', () => {
         userAddress,
       });
 
+      expect(result.isValid).toBe(false);
+      expect(result.reason).toContain('No matching operation pattern found');
+      const approvalAttempt = result.details?.attempts?.find(
+        (a: any) => a.type === TransactionType.APPROVAL,
+      );
+      expect(approvalAttempt?.reason).toContain(
+        'Approval spender is not a known LI.FI contract',
+      );
+    });
+
+    it('should accept approval with Permit2 Proxy as spender', () => {
+      const permit2ApproveCalldata = iface.encodeFunctionData('approve', [
+        LIFI_PERMIT2_PROXY,
+        1000000000000000000n,
+      ]);
+
+      const tx = {
+        to: rETHAddress,
+        from: userAddress,
+        value: '0x0',
+        data: permit2ApproveCalldata,
+        nonce: 0,
+        gasLimit: '0x30d40',
+        gasPrice: '0x4a817c800',
+        chainId: 1,
+        type: 0,
+      };
+
+      const result = shield.validate({
+        yieldId,
+        unsignedTransaction: JSON.stringify(tx),
+        userAddress,
+      });
+
       expect(result.isValid).toBe(true);
+      expect(result.detectedType).toBe(TransactionType.APPROVAL);
+    });
+
+    it('should accept approval with checksummed LI.FI Diamond spender', () => {
+      const checksummedDiamond = '0x1231DEB6f5749EF6cE6943a275A1D3E7486F4EaE';
+      const checksumApproveCalldata = iface.encodeFunctionData('approve', [
+        checksummedDiamond,
+        1000000000000000000n,
+      ]);
+
+      const tx = {
+        to: rETHAddress,
+        from: userAddress,
+        value: '0x0',
+        data: checksumApproveCalldata,
+        nonce: 0,
+        gasLimit: '0x30d40',
+        gasPrice: '0x4a817c800',
+        chainId: 1,
+        type: 0,
+      };
+
+      const result = shield.validate({
+        yieldId,
+        unsignedTransaction: JSON.stringify(tx),
+        userAddress,
+      });
+
+      expect(result.isValid).toBe(true);
+    });
+  });
+
+  describe('SWAP transactions', () => {
+    // --- Happy paths ---
+
+    it('should validate a direct Diamond swapTokensSingleV3ERC20ToNative with matching receiver', () => {
+      const tx = {
+        to: LIFI_DIAMOND,
+        from: userAddress,
+        value: '0x0',
+        data: diamondSwapCalldata,
+        nonce: 0,
+        gasLimit: '0x30d40',
+        gasPrice: '0x4a817c800',
+        chainId: 1,
+        type: 0,
+      };
+
+      const result = shield.validate({
+        yieldId,
+        unsignedTransaction: JSON.stringify(tx),
+        userAddress,
+      });
+
+      expect(result.isValid).toBe(true);
+      expect(result.detectedType).toBe(TransactionType.SWAP);
+    });
+
+    it('should validate a direct Diamond swapTokensSingleV3ERC20ToERC20 with matching receiver', () => {
+      const tx = {
+        to: LIFI_DIAMOND,
+        from: userAddress,
+        value: '0x0',
+        data: diamondSingleV3SwapCalldata,
+        nonce: 0,
+        gasLimit: '0x30d40',
+        gasPrice: '0x4a817c800',
+        chainId: 1,
+        type: 0,
+      };
+
+      const result = shield.validate({
+        yieldId,
+        unsignedTransaction: JSON.stringify(tx),
+        userAddress,
+      });
+
+      expect(result.isValid).toBe(true);
+      expect(result.detectedType).toBe(TransactionType.SWAP);
+    });
+
+    it('should validate Permit2 Proxy callDiamondWithPermit2 wrapping valid swap', () => {
+      const tx = {
+        to: LIFI_PERMIT2_PROXY,
+        from: userAddress,
+        value: '0x0',
+        data: permit2WrappedSwapCalldata,
+        nonce: 0,
+        gasLimit: '0x30d40',
+        gasPrice: '0x4a817c800',
+        chainId: 1,
+        type: 0,
+      };
+
+      const result = shield.validate({
+        yieldId,
+        unsignedTransaction: JSON.stringify(tx),
+        userAddress,
+      });
+
+      expect(result.isValid).toBe(true);
+      expect(result.detectedType).toBe(TransactionType.SWAP);
+    });
+
+    it('should validate Permit2 Proxy callDiamondWithPermit2Witness wrapping valid swap', () => {
+      const tx = {
+        to: LIFI_PERMIT2_PROXY,
+        from: userAddress,
+        value: '0x0',
+        data: permit2WitnessWrappedSwapCalldata,
+        nonce: 0,
+        gasLimit: '0x30d40',
+        gasPrice: '0x4a817c800',
+        chainId: 1,
+        type: 0,
+      };
+
+      const result = shield.validate({
+        yieldId,
+        unsignedTransaction: JSON.stringify(tx),
+        userAddress,
+      });
+
+      expect(result.isValid).toBe(true);
+      expect(result.detectedType).toBe(TransactionType.SWAP);
+    });
+
+    it('should validate Permit2 Proxy callDiamondWithEIP2612Signature wrapping valid swap', () => {
+      const tx = {
+        to: LIFI_PERMIT2_PROXY,
+        from: userAddress,
+        value: '0x0',
+        data: eip2612WrappedSwapCalldata,
+        nonce: 0,
+        gasLimit: '0x30d40',
+        gasPrice: '0x4a817c800',
+        chainId: 1,
+        type: 0,
+      };
+
+      const result = shield.validate({
+        yieldId,
+        unsignedTransaction: JSON.stringify(tx),
+        userAddress,
+      });
+
+      expect(result.isValid).toBe(true);
+      expect(result.detectedType).toBe(TransactionType.SWAP);
+    });
+
+    // --- Rejections ---
+
+    it('should reject SWAP to unknown contract', () => {
+      const tx = {
+        to: '0x0000000000000000000000000000000000000001',
+        from: userAddress,
+        value: '0x0',
+        data: diamondSwapCalldata,
+        nonce: 0,
+        gasLimit: '0x30d40',
+        gasPrice: '0x4a817c800',
+        chainId: 1,
+        type: 0,
+      };
+
+      const result = shield.validate({
+        yieldId,
+        unsignedTransaction: JSON.stringify(tx),
+        userAddress,
+      });
+
+      expect(result.isValid).toBe(false);
+      expect(result.reason).toContain('No matching operation pattern found');
+      const swapAttempt = result.details?.attempts?.find(
+        (a: any) => a.type === TransactionType.SWAP,
+      );
+      expect(swapAttempt?.reason).toContain(
+        'SWAP target is not a known LI.FI contract',
+      );
+    });
+
+    it('should reject SWAP with no calldata', () => {
+      const tx = {
+        to: LIFI_DIAMOND,
+        from: userAddress,
+        value: '0x0',
+        data: '0x',
+        nonce: 0,
+        gasLimit: '0x30d40',
+        gasPrice: '0x4a817c800',
+        chainId: 1,
+        type: 0,
+      };
+
+      const result = shield.validate({
+        yieldId,
+        unsignedTransaction: JSON.stringify(tx),
+        userAddress,
+      });
+
+      expect(result.isValid).toBe(false);
+      expect(result.reason).toContain('No matching operation pattern found');
+      const swapAttempt = result.details?.attempts?.find(
+        (a: any) => a.type === TransactionType.SWAP,
+      );
+      expect(swapAttempt?.reason).toContain('SWAP transaction has no calldata');
+    });
+
+    it('should reject SWAP with unknown Diamond function selector', () => {
+      const tx = {
+        to: LIFI_DIAMOND,
+        from: userAddress,
+        value: '0x0',
+        data: '0xdeadbeef' + '00'.repeat(128),
+        nonce: 0,
+        gasLimit: '0x30d40',
+        gasPrice: '0x4a817c800',
+        chainId: 1,
+        type: 0,
+      };
+
+      const result = shield.validate({
+        yieldId,
+        unsignedTransaction: JSON.stringify(tx),
+        userAddress,
+      });
+
+      expect(result.isValid).toBe(false);
+      expect(result.reason).toContain('No matching operation pattern found');
+      const swapAttempt = result.details?.attempts?.find(
+        (a: any) => a.type === TransactionType.SWAP,
+      );
+      expect(swapAttempt?.reason).toContain(
+        'Failed to parse LI.FI swap calldata',
+      );
+    });
+
+    it('should reject SWAP with receiver not matching user address', () => {
+      const tx = {
+        to: LIFI_DIAMOND,
+        from: userAddress,
+        value: '0x0',
+        data: wrongReceiverSwapCalldata,
+        nonce: 0,
+        gasLimit: '0x30d40',
+        gasPrice: '0x4a817c800',
+        chainId: 1,
+        type: 0,
+      };
+
+      const result = shield.validate({
+        yieldId,
+        unsignedTransaction: JSON.stringify(tx),
+        userAddress,
+      });
+
+      expect(result.isValid).toBe(false);
+      expect(result.reason).toContain('No matching operation pattern found');
+      const swapAttempt = result.details?.attempts?.find(
+        (a: any) => a.type === TransactionType.SWAP,
+      );
+      expect(swapAttempt?.reason).toContain(
+        'SWAP receiver does not match user address',
+      );
+    });
+
+    it('should reject SWAP with ETH value', () => {
+      const tx = {
+        to: LIFI_DIAMOND,
+        from: userAddress,
+        value: '0xde0b6b3a7640000',
+        data: diamondSwapCalldata,
+        nonce: 0,
+        gasLimit: '0x30d40',
+        gasPrice: '0x4a817c800',
+        chainId: 1,
+        type: 0,
+      };
+
+      const result = shield.validate({
+        yieldId,
+        unsignedTransaction: JSON.stringify(tx),
+        userAddress,
+      });
+
+      expect(result.isValid).toBe(false);
+      expect(result.reason).toContain('No matching operation pattern found');
+      const swapAttempt = result.details?.attempts?.find(
+        (a: any) => a.type === TransactionType.SWAP,
+      );
+      expect(swapAttempt?.reason).toContain('SWAP should not send ETH value');
+    });
+
+    it('should reject SWAP from wrong user', () => {
+      const wrongUser = '0x0000000000000000000000000000000000000001';
+      const tx = {
+        to: LIFI_DIAMOND,
+        from: wrongUser,
+        value: '0x0',
+        data: diamondSwapCalldata,
+        nonce: 0,
+        gasLimit: '0x30d40',
+        gasPrice: '0x4a817c800',
+        chainId: 1,
+        type: 0,
+      };
+
+      const result = shield.validate({
+        yieldId,
+        unsignedTransaction: JSON.stringify(tx),
+        userAddress,
+      });
+
+      expect(result.isValid).toBe(false);
+      expect(result.reason).toContain('No matching operation pattern found');
+    });
+
+    it('should reject SWAP on wrong network', () => {
+      const tx = {
+        to: LIFI_DIAMOND,
+        from: userAddress,
+        value: '0x0',
+        data: diamondSwapCalldata,
+        nonce: 0,
+        gasLimit: '0x30d40',
+        gasPrice: '0x4a817c800',
+        chainId: 137,
+        type: 0,
+      };
+
+      const result = shield.validate({
+        yieldId,
+        unsignedTransaction: JSON.stringify(tx),
+        userAddress,
+      });
+
+      expect(result.isValid).toBe(false);
+      expect(result.reason).toContain('No matching operation pattern found');
+    });
+
+    // --- Permit2 Proxy-specific rejections ---
+
+    it('should reject Permit2 Proxy SWAP with wrong receiver in inner calldata', () => {
+      const tx = {
+        to: LIFI_PERMIT2_PROXY,
+        from: userAddress,
+        value: '0x0',
+        data: permit2WrongReceiverCalldata,
+        nonce: 0,
+        gasLimit: '0x30d40',
+        gasPrice: '0x4a817c800',
+        chainId: 1,
+        type: 0,
+      };
+
+      const result = shield.validate({
+        yieldId,
+        unsignedTransaction: JSON.stringify(tx),
+        userAddress,
+      });
+
+      expect(result.isValid).toBe(false);
+      expect(result.reason).toContain('No matching operation pattern found');
+      const swapAttempt = result.details?.attempts?.find(
+        (a: any) => a.type === TransactionType.SWAP,
+      );
+      expect(swapAttempt?.reason).toContain(
+        'SWAP receiver does not match user address',
+      );
+    });
+
+    it('should reject Permit2 Proxy SWAP with garbage inner calldata', () => {
+      const garbageInnerCalldata = permit2ProxyIface.encodeFunctionData(
+        'callDiamondWithPermit2',
+        ['0xdeadbeef' + '00'.repeat(128), dummyPermit, dummySignature],
+      );
+
+      const tx = {
+        to: LIFI_PERMIT2_PROXY,
+        from: userAddress,
+        value: '0x0',
+        data: garbageInnerCalldata,
+        nonce: 0,
+        gasLimit: '0x30d40',
+        gasPrice: '0x4a817c800',
+        chainId: 1,
+        type: 0,
+      };
+
+      const result = shield.validate({
+        yieldId,
+        unsignedTransaction: JSON.stringify(tx),
+        userAddress,
+      });
+
+      expect(result.isValid).toBe(false);
+      expect(result.reason).toContain('No matching operation pattern found');
+      const swapAttempt = result.details?.attempts?.find(
+        (a: any) => a.type === TransactionType.SWAP,
+      );
+      expect(swapAttempt?.reason).toContain(
+        'Failed to parse LI.FI swap calldata',
+      );
+    });
+
+    it('should reject Permit2 Proxy target with unparseable outer calldata', () => {
+      const tx = {
+        to: LIFI_PERMIT2_PROXY,
+        from: userAddress,
+        value: '0x0',
+        data: '0xffffffff' + '00'.repeat(64),
+        nonce: 0,
+        gasLimit: '0x30d40',
+        gasPrice: '0x4a817c800',
+        chainId: 1,
+        type: 0,
+      };
+
+      const result = shield.validate({
+        yieldId,
+        unsignedTransaction: JSON.stringify(tx),
+        userAddress,
+      });
+
+      expect(result.isValid).toBe(false);
+      expect(result.reason).toContain('No matching operation pattern found');
+      const swapAttempt = result.details?.attempts?.find(
+        (a: any) => a.type === TransactionType.SWAP,
+      );
+      expect(swapAttempt?.reason).toContain(
+        'Failed to extract Diamond calldata from Permit2 Proxy',
+      );
     });
   });
 
@@ -713,6 +1274,52 @@ describe('RocketPoolValidator via Shield', () => {
 
       expect(result.isValid).toBe(true);
       expect(result.detectedType).toBe(TransactionType.APPROVAL);
+    });
+
+    it('should detect direct Diamond swap as SWAP', () => {
+      const tx = {
+        to: LIFI_DIAMOND,
+        from: userAddress,
+        value: '0x0',
+        data: diamondSwapCalldata,
+        nonce: 0,
+        gasLimit: '0x30d40',
+        gasPrice: '0x4a817c800',
+        chainId: 1,
+        type: 0,
+      };
+
+      const result = shield.validate({
+        yieldId,
+        unsignedTransaction: JSON.stringify(tx),
+        userAddress,
+      });
+
+      expect(result.isValid).toBe(true);
+      expect(result.detectedType).toBe(TransactionType.SWAP);
+    });
+
+    it('should detect Permit2 Proxy swap as SWAP', () => {
+      const tx = {
+        to: LIFI_PERMIT2_PROXY,
+        from: userAddress,
+        value: '0x0',
+        data: permit2WrappedSwapCalldata,
+        nonce: 0,
+        gasLimit: '0x30d40',
+        gasPrice: '0x4a817c800',
+        chainId: 1,
+        type: 0,
+      };
+
+      const result = shield.validate({
+        yieldId,
+        unsignedTransaction: JSON.stringify(tx),
+        userAddress,
+      });
+
+      expect(result.isValid).toBe(true);
+      expect(result.detectedType).toBe(TransactionType.SWAP);
     });
 
     it('should reject unknown calldata', () => {
