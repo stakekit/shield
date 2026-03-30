@@ -98,7 +98,7 @@ export class ERC4626Validator extends BaseEVMValidator {
     unsignedTransaction: string,
     transactionType: TransactionType,
     userAddress: string,
-    _args?: ActionArguments,
+    args?: ActionArguments,
     _context?: ValidationContext,
   ): ValidationResult {
     const decoded = this.decodeEVMTransaction(unsignedTransaction);
@@ -125,6 +125,8 @@ export class ERC4626Validator extends BaseEVMValidator {
       return this.blocked('Transaction has no destination address');
     }
 
+    const receiverAddress = args?.receiverAddress;
+
     // Route to appropriate validation based on transaction type
     switch (transactionType) {
       case TransactionType.APPROVAL:
@@ -132,9 +134,9 @@ export class ERC4626Validator extends BaseEVMValidator {
       case TransactionType.WRAP:
         return this.validateWrap(tx, chainId);
       case TransactionType.SUPPLY:
-        return this.validateSupply(tx, userAddress, chainId);
+        return this.validateSupply(tx, userAddress, chainId, receiverAddress);
       case TransactionType.WITHDRAW:
-        return this.validateWithdraw(tx, userAddress, chainId);
+        return this.validateWithdraw(tx, userAddress, chainId, receiverAddress);
       case TransactionType.UNWRAP:
         return this.validateUnwrap(tx, chainId);
       default:
@@ -177,7 +179,7 @@ export class ERC4626Validator extends BaseEVMValidator {
     }
 
     // Get spender (should be vault address)
-    const [spender, amount] = parsed.args;
+    const [spender] = parsed.args;
 
     // Validate spender is a whitelisted vault
     const vaultInfo = this.vaultInfoMap.get(
@@ -194,12 +196,6 @@ export class ERC4626Validator extends BaseEVMValidator {
         expected: vaultInfo.inputTokenAddress,
         actual: tx.to,
       });
-    }
-
-    // Validate amount is not zero
-    const amountBigInt = BigInt(amount);
-    if (amountBigInt === 0n) {
-      return this.blocked('Approval amount is zero');
     }
 
     return this.safe();
@@ -265,6 +261,7 @@ export class ERC4626Validator extends BaseEVMValidator {
     tx: EVMTransaction,
     userAddress: string,
     chainId: number,
+    receiverAddress?: string,
   ): ValidationResult {
     const resolved = this.resolveVault(tx, chainId);
     if ('error' in resolved) return resolved.error;
@@ -310,10 +307,12 @@ export class ERC4626Validator extends BaseEVMValidator {
       return this.blocked('Supply amount is zero');
     }
 
-    // Validate receiver is the user
-    if (receiver.toLowerCase() !== userAddress.toLowerCase()) {
-      return this.blocked('Receiver address does not match user address', {
-        expected: userAddress,
+    // Validate receiver is the intended receiver
+    const expectedReceiver = receiverAddress ?? userAddress;
+
+    if (receiver.toLowerCase() !== expectedReceiver.toLowerCase()) {
+      return this.blocked('Receiver address does not match expected address', {
+        expected: expectedReceiver,
         actual: receiver,
       });
     }
@@ -328,6 +327,7 @@ export class ERC4626Validator extends BaseEVMValidator {
     tx: EVMTransaction,
     userAddress: string,
     chainId: number,
+    receiverAddress?: string,
   ): ValidationResult {
     const resolved = this.resolveVault(tx, chainId);
     if ('error' in resolved) return resolved.error;
@@ -381,10 +381,11 @@ export class ERC4626Validator extends BaseEVMValidator {
       });
     }
 
-    // Validate receiver is the user (for safety)
-    if (receiver.toLowerCase() !== userAddress.toLowerCase()) {
-      return this.blocked('Receiver address does not match user address', {
-        expected: userAddress,
+    const expectedReceiver = receiverAddress ?? userAddress;
+
+    if (receiver.toLowerCase() !== expectedReceiver.toLowerCase()) {
+      return this.blocked('Receiver address does not match expected address', {
+        expected: expectedReceiver,
         actual: receiver,
       });
     }

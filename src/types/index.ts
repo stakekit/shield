@@ -27,6 +27,7 @@ export type ActionArguments = {
   cosmosPubKey?: string;
   tezosPubKey?: string;
   nominatorAddress?: string;
+  receiverAddress?: string;
   nftIds?: string[];
 };
 

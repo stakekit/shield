@@ -17,6 +17,7 @@ const MALICIOUS_ADDRESS = '0x000000000000000000000000000000000000bad1';
 const PAUSED_VAULT_ADDRESS = '0xDEAD000000000000000000000000000000000001';
 const ALLOCATOR_VAULT_ADDRESS = '0xa110ca7040000000000000000000000000000001';
 const MORPHO_VAULT_ADDRESS = '0x00000000000000000000000000000000000face2';
+const RECEIVER_ADDRESS = '0x2222222222222222222222222222222222222222';
 const CHAIN_ID = 42161; // Arbitrum
 
 // ---------------------------------------------------------------------------
@@ -158,7 +159,7 @@ describe('ERC4626Validator', () => {
       expect(result.reason).toContain('not a whitelisted vault');
     });
 
-    it('should reject zero approval amount', () => {
+    it('should accept zero approval amount (USDT reset pattern)', () => {
       const data = erc20Iface.encodeFunctionData('approve', [VAULT_ADDRESS, 0]);
       const tx = buildTx({ to: INPUT_TOKEN, data, value: '0x0' });
       const result = validator.validate(
@@ -166,8 +167,7 @@ describe('ERC4626Validator', () => {
         TransactionType.APPROVAL,
         USER_ADDRESS,
       );
-      expect(result.isValid).toBe(false);
-      expect(result.reason).toContain('zero');
+      expect(result.isValid).toBe(true);
     });
 
     it('should reject when ETH value is attached', () => {
@@ -658,6 +658,104 @@ describe('ERC4626Validator', () => {
       );
       expect(result.isValid).toBe(false);
       expect(result.reason).toContain('zero');
+    });
+  });
+
+  // =========================================================================
+  // receiverAddress override (args.receiverAddress)
+  // =========================================================================
+  describe('receiverAddress override via args', () => {
+    // ---- SUPPLY ----
+    it('SUPPLY: should accept when args.receiverAddress matches calldata receiver', () => {
+      const data = erc4626Iface.encodeFunctionData('deposit', [
+        ethers.parseUnits('1000', 6),
+        RECEIVER_ADDRESS,
+      ]);
+      const tx = buildTx({ to: VAULT_ADDRESS, data, value: '0x0' });
+      const result = validator.validate(
+        tx,
+        TransactionType.SUPPLY,
+        USER_ADDRESS,
+        { receiverAddress: RECEIVER_ADDRESS },
+      );
+      expect(result.isValid).toBe(true);
+    });
+
+    it('SUPPLY: should block when args.receiverAddress does NOT match calldata receiver', () => {
+      const data = erc4626Iface.encodeFunctionData('deposit', [
+        ethers.parseUnits('1000', 6),
+        MALICIOUS_ADDRESS,
+      ]);
+      const tx = buildTx({ to: VAULT_ADDRESS, data, value: '0x0' });
+      const result = validator.validate(
+        tx,
+        TransactionType.SUPPLY,
+        USER_ADDRESS,
+        { receiverAddress: RECEIVER_ADDRESS },
+      );
+      expect(result.isValid).toBe(false);
+      expect(result.reason).toContain('does not match expected address');
+    });
+
+    it('SUPPLY: without args.receiverAddress, receiver != user is blocked (default behavior)', () => {
+      const data = erc4626Iface.encodeFunctionData('deposit', [
+        ethers.parseUnits('1000', 6),
+        OTHER_ADDRESS,
+      ]);
+      const tx = buildTx({ to: VAULT_ADDRESS, data, value: '0x0' });
+      const result = validator.validate(
+        tx,
+        TransactionType.SUPPLY,
+        USER_ADDRESS,
+      );
+      expect(result.isValid).toBe(false);
+      expect(result.reason).toContain('does not match expected address');
+    });
+
+    it('SUPPLY: without args.receiverAddress, receiver == user is safe (default behavior)', () => {
+      const data = erc4626Iface.encodeFunctionData('deposit', [
+        ethers.parseUnits('1000', 6),
+        USER_ADDRESS,
+      ]);
+      const tx = buildTx({ to: VAULT_ADDRESS, data, value: '0x0' });
+      const result = validator.validate(
+        tx,
+        TransactionType.SUPPLY,
+        USER_ADDRESS,
+      );
+      expect(result.isValid).toBe(true);
+    });
+
+    // ---- WITHDRAW ----
+    it('WITHDRAW: should accept when args.receiverAddress matches calldata receiver', () => {
+      const data = erc4626Iface.encodeFunctionData(
+        'withdraw(uint256,address,address)',
+        [ethers.parseUnits('1000', 6), RECEIVER_ADDRESS, USER_ADDRESS],
+      );
+      const tx = buildTx({ to: VAULT_ADDRESS, data, value: '0x0' });
+      const result = validator.validate(
+        tx,
+        TransactionType.WITHDRAW,
+        USER_ADDRESS,
+        { receiverAddress: RECEIVER_ADDRESS },
+      );
+      expect(result.isValid).toBe(true);
+    });
+
+    it('WITHDRAW: should block when args.receiverAddress does NOT match calldata receiver', () => {
+      const data = erc4626Iface.encodeFunctionData(
+        'withdraw(uint256,address,address)',
+        [ethers.parseUnits('1000', 6), MALICIOUS_ADDRESS, USER_ADDRESS],
+      );
+      const tx = buildTx({ to: VAULT_ADDRESS, data, value: '0x0' });
+      const result = validator.validate(
+        tx,
+        TransactionType.WITHDRAW,
+        USER_ADDRESS,
+        { receiverAddress: RECEIVER_ADDRESS },
+      );
+      expect(result.isValid).toBe(false);
+      expect(result.reason).toContain('does not match expected address');
     });
   });
 
