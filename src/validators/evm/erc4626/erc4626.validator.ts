@@ -125,7 +125,7 @@ export class ERC4626Validator extends BaseEVMValidator {
       return this.blocked('Transaction has no destination address');
     }
 
-    const receiverAddress = args?.receiverAddress;
+    const receiverAddress = args?.receiverAddress || undefined;
 
     // Route to appropriate validation based on transaction type
     switch (transactionType) {

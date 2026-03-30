@@ -50,7 +50,7 @@ export const requestSchema = {
         cosmosPubKey: { type: 'string', maxLength: 256 },
         tezosPubKey: { type: 'string', maxLength: 256 },
         nominatorAddress: { type: 'string', maxLength: 128 },
-        receiverAddress: { type: 'string', maxLength: 128 },
+        receiverAddress: { type: 'string', minLength: 1, maxLength: 128 },
         nftIds: {
           type: 'array',
           items: { type: 'string', maxLength: 256 },
