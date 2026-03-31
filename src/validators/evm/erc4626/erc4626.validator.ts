@@ -8,6 +8,8 @@ import {
 import { BaseEVMValidator, EVMTransaction } from '../base.validator';
 import { VaultInfo, VaultConfiguration } from './types';
 import { WETH_ADDRESSES } from './constants';
+import { isNonEmptyString } from '../../../utils/validation';
+
 
 /**
  * Standard ERC4626 ABI - only the functions we need to validate
@@ -125,7 +127,9 @@ export class ERC4626Validator extends BaseEVMValidator {
       return this.blocked('Transaction has no destination address');
     }
 
-    const receiverAddress = args?.receiverAddress || undefined;
+    const receiverAddress = isNonEmptyString(args?.receiverAddress)
+    ? args.receiverAddress
+    : undefined;
 
     // Route to appropriate validation based on transaction type
     switch (transactionType) {
