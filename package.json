@@ -71,5 +71,10 @@
     "prettier": "^3.2.5",
     "ts-jest": "^29.4.6",
     "typescript": "^5.0.0"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "esbuild"
+    ]
   }
 }

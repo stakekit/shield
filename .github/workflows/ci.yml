@@ -18,8 +18,15 @@ jobs:
         node-version: [20.17.0, 22.x]
 
     steps:
+      - name: Harden runner
+        uses: step-security/harden-runner@fe104658747b27e96e4f7e80cd0a94068e53901d  # v2.16.1
+        with:
+          egress-policy: audit
+
       - name: Checkout code
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          persist-credentials: false
 
       - name: Setup Node.js
         uses: actions/setup-node@6044e13b5dc448c55e2357c09f80417699197238
@@ -44,8 +51,13 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-pnpm-store-
 
+      - name: Set up Socket Firewall
+        uses: socketdev/action@937f824ec476dfd164d4a4d9995751427b0be143  # v1
+        with:
+          mode: firewall
+
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+        run: sfw pnpm install --frozen-lockfile
 
       - name: Run linter
         run: pnpm run lint
@@ -70,8 +82,15 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      - name: Harden runner
+        uses: step-security/harden-runner@fe104658747b27e96e4f7e80cd0a94068e53901d  # v2.16.1
+        with:
+          egress-policy: audit
+
       - name: Checkout code
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          persist-credentials: false
 
       - name: Setup Node.js
         uses: actions/setup-node@6044e13b5dc448c55e2357c09f80417699197238
@@ -83,8 +102,13 @@ jobs:
         with:
           version: 10.12.2
 
+      - name: Set up Socket Firewall
+        uses: socketdev/action@937f824ec476dfd164d4a4d9995751427b0be143  # v1
+        with:
+          mode: firewall
+
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+        run: sfw pnpm install --frozen-lockfile
 
       - name: Run pnpm audit
         run: pnpm audit --audit-level=critical
@@ -92,3 +116,22 @@ jobs:
       - name: Check for dependency updates
         run: pnpm outdated
         continue-on-error: true
+
+  dependency-review:
+    name: Dependency Review
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+
+    steps:
+      - name: Harden runner
+        uses: step-security/harden-runner@fe104658747b27e96e4f7e80cd0a94068e53901d  # v2.16.1
+        with:
+          egress-policy: audit
+
+      - name: Checkout code
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          persist-credentials: false
+          
+      - name: Dependency Review
+        uses: actions/dependency-review-action@da24556b548a50705dd671f47852072ea4c105d9  # v4

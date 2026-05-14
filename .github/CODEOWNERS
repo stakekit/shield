@@ -1,2 +1,7 @@
 # Workflow/CI files specifically
 .github/ @ajag408 @Philippoes @petar-omni @jdomingos @raiseerco
+
+# Supply chain critical files -- lockfile, install config, package manifest
+.npmrc @ajag408 @Philippoes @petar-omni @jdomingos @raiseerco
+package.json @ajag408 @Philippoes @petar-omni @jdomingos @raiseerco
+pnpm-lock.yaml @ajag408 @Philippoes @petar-omni @jdomingos @raiseerco
