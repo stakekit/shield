@@ -56,6 +56,8 @@ jobs:
         uses: socketdev/action@937f824ec476dfd164d4a4d9995751427b0be143  # v1
         with:
           mode: firewall
+        env:
+          SOCKET_SECURITY_API_KEY: ${{ secrets.SOCKET_SECURITY_API_KEY }}
 
       - name: Install dependencies
         run: sfw pnpm install --frozen-lockfile
@@ -117,6 +119,8 @@ jobs:
         uses: socketdev/action@937f824ec476dfd164d4a4d9995751427b0be143  # v1
         with:
           mode: firewall
+        env:
+          SOCKET_SECURITY_API_KEY: ${{ secrets.SOCKET_SECURITY_API_KEY }}
 
       - name: Install dependencies
         run: sfw pnpm install --frozen-lockfile
@@ -206,6 +210,8 @@ jobs:
         uses: socketdev/action@937f824ec476dfd164d4a4d9995751427b0be143  # v1
         with:
           mode: firewall
+        env:
+          SOCKET_SECURITY_API_KEY: ${{ secrets.SOCKET_SECURITY_API_KEY }}
 
       - name: Install dependencies
         run: sfw pnpm install --frozen-lockfile
