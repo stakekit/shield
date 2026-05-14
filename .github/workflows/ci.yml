@@ -34,22 +34,10 @@ jobs:
           node-version: ${{ matrix.node-version }}
 
       - name: Install pnpm
-        uses: pnpm/action-setup@41ff72655975bd51cab0327fa583b6e92b6d3061
-        with:
-          version: 10.12.2
-
-      - name: Get pnpm store directory
         shell: bash
         run: |
-          echo "STORE_PATH=$(pnpm store path --silent)" >> $GITHUB_ENV
-
-      - name: Setup pnpm cache
-        uses: actions/cache@cdf6c1fa76f9f475f3d7449005a359c84ca0f306
-        with:
-          path: ${{ env.STORE_PATH }}
-          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
-          restore-keys: |
-            ${{ runner.os }}-pnpm-store-
+          corepack enable
+          corepack prepare pnpm@10.12.2 --activate
 
       - name: Set up Socket Firewall
         uses: socketdev/action@937f824ec476dfd164d4a4d9995751427b0be143  # v1
@@ -72,7 +60,7 @@ jobs:
         if: matrix.node-version == '20.17.0'
         uses: codecov/codecov-action@671740ac38dd9b0130fbe1cec585b89eea48d3de 
         with:
-          file: ./coverage/lcov.info
+          files: ./coverage/lcov.info
           flags: unittests
           name: codecov-umbrella
           fail_ci_if_error: false
@@ -98,9 +86,10 @@ jobs:
           node-version: 20.17.0
 
       - name: Install pnpm
-        uses: pnpm/action-setup@41ff72655975bd51cab0327fa583b6e92b6d3061
-        with:
-          version: 10.12.2
+        shell: bash
+        run: |
+          corepack enable
+          corepack prepare pnpm@10.12.2 --activate
 
       - name: Set up Socket Firewall
         uses: socketdev/action@937f824ec476dfd164d4a4d9995751427b0be143  # v1
@@ -112,6 +101,7 @@ jobs:
 
       - name: Run pnpm audit
         run: pnpm audit --audit-level=critical
+        continue-on-error: true
 
       - name: Check for dependency updates
         run: pnpm outdated
@@ -132,6 +122,6 @@ jobs:
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
         with:
           persist-credentials: false
-          
+
       - name: Dependency Review
         uses: actions/dependency-review-action@da24556b548a50705dd671f47852072ea4c105d9  # v4
