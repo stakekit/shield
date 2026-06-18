@@ -49,6 +49,12 @@ import { Shield } from '@yieldxyz/shield';
 
 const shield = new Shield();
 
+// Parameters controlled by the caller. Keeping them in variables lets us
+// use the same values for the request and, later, for validation.
+const yieldId = 'ethereum-eth-lido-staking';
+const userWalletAddress = '0x742d35cc6634c0532925a3b844bc9e7595f0beb8';
+const args = { amount: '0.01' };
+
 // Get transaction from Yield API
 const response = await fetch('https://api.yield.xyz/v1/actions/enter', {
   method: 'POST',
@@ -57,21 +63,26 @@ const response = await fetch('https://api.yield.xyz/v1/actions/enter', {
     'X-API-Key': process.env.YIELD_API_KEY, // Your API key
   },
   body: JSON.stringify({
-    yieldId: 'ethereum-eth-lido-staking',
+    yieldId,
     address: userWalletAddress,
-    arguments: { amount: '0.01' },
+    arguments: args,
   }),
 });
 
 const action = await response.json();
 
-// Validate before signing
+// Validate before signing.
+//
+// Note: only `transaction.unsignedTransaction` should come from the API
+// response. The other fields — yieldId, userAddress, args — should be the
+// values you sent in the request, since the goal is to check the API's
+// transaction against what you actually asked for.
 for (const transaction of action.transactions) {
   const result = shield.validate({
     unsignedTransaction: transaction.unsignedTransaction,
-    yieldId: action.yieldId,
+    yieldId,
     userAddress: userWalletAddress,
-    args: action.arguments, // Optional
+    args, // Optional
   });
 
   if (!result.isValid) {
