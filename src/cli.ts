@@ -30,8 +30,10 @@ async function main(): Promise<void> {
   try {
     const input = await readStdin();
     const output = handleJsonRequest(input);
-    process.stdout.write(output + '\n');
-    process.exit(0);
+    // Wait for stdout to flush before exiting. process.exit() drops any
+    // unflushed buffer when stdout is a pipe, truncating large responses
+    // (e.g. getSupportedYieldIds) at the ~64KB pipe-buffer boundary.
+    process.stdout.write(output + '\n', () => process.exit(0));
   } catch (error) {
     // SECURITY: Output valid JSON even on catastrophic failure
     const errorResponse = {
@@ -43,9 +45,10 @@ async function main(): Promise<void> {
       },
       meta: { requestHash: 'unavailable' },
     };
-    process.stdout.write(JSON.stringify(errorResponse) + '\n');
     process.stdin.destroy();
-    process.exit(1);
+    process.stdout.write(JSON.stringify(errorResponse) + '\n', () =>
+      process.exit(1),
+    );
   }
 }
 
