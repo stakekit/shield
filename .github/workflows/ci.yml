@@ -15,7 +15,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        node-version: [20.17.0, 22.x]
+        node-version: [20.19.0, 22.x, 24.x]
 
     steps:
       - name: Harden runner
@@ -32,13 +32,14 @@ jobs:
         uses: actions/setup-node@6044e13b5dc448c55e2357c09f80417699197238
         with:
           node-version: ${{ matrix.node-version }}
+          package-manager-cache: false
 
       - name: Install pnpm
         shell: bash
         run: |
           npm install -g corepack@0.35.0
           corepack enable
-          corepack prepare pnpm@10.12.2 --activate
+          corepack prepare pnpm@10.33.1 --activate
 
       - name: Set up Socket Firewall
         uses: socketdev/action@937f824ec476dfd164d4a4d9995751427b0be143  # v1
@@ -60,7 +61,7 @@ jobs:
         run: pnpm run build
 
       - name: Upload coverage to Codecov
-        if: matrix.node-version == '20.17.0'
+        if: matrix.node-version == '24.x'
         uses: codecov/codecov-action@671740ac38dd9b0130fbe1cec585b89eea48d3de 
         with:
           files: ./coverage/lcov.info
@@ -86,14 +87,15 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@6044e13b5dc448c55e2357c09f80417699197238
         with:
-          node-version: 20.17.0
+          node-version: 24.x
+          package-manager-cache: false
 
       - name: Install pnpm
         shell: bash
         run: |
           npm install -g corepack@0.35.0
           corepack enable
-          corepack prepare pnpm@10.12.2 --activate
+          corepack prepare pnpm@10.33.1 --activate
 
       - name: Set up Socket Firewall
         uses: socketdev/action@937f824ec476dfd164d4a4d9995751427b0be143  # v1

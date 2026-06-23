@@ -43,14 +43,15 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@6044e13b5dc448c55e2357c09f80417699197238
         with:
-          node-version: "22"
+          node-version: "24"
+          package-manager-cache: false
 
       - name: Install pnpm
         shell: bash
         run: |
           npm install -g corepack@0.35.0
           corepack enable
-          corepack prepare pnpm@10.12.2 --activate
+          corepack prepare pnpm@10.33.1 --activate
 
       - name: Set up Socket Firewall
         uses: socketdev/action@937f824ec476dfd164d4a4d9995751427b0be143  # v1
@@ -101,15 +102,16 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@6044e13b5dc448c55e2357c09f80417699197238
         with:
-          node-version: "22"
+          node-version: "24"
           registry-url: "https://registry.npmjs.org"
+          package-manager-cache: false
 
       - name: Install pnpm
         shell: bash
         run: |
           npm install -g corepack@0.35.0
           corepack enable
-          corepack prepare pnpm@10.12.2 --activate
+          corepack prepare pnpm@10.33.1 --activate
 
       - name: Update npm
         run: npm install -g npm@11.15.0
@@ -189,21 +191,23 @@ jobs:
         if: ${{ !matrix.node_arch }}
         uses: actions/setup-node@6044e13b5dc448c55e2357c09f80417699197238
         with:
-          node-version: "22"
+          node-version: "24"
+          package-manager-cache: false
 
       - name: Setup Node.js (x64 via Rosetta)
         if: ${{ matrix.node_arch }}
         uses: actions/setup-node@6044e13b5dc448c55e2357c09f80417699197238
         with:
-          node-version: "22"
+          node-version: "24"
           architecture: ${{ matrix.node_arch }}
+          package-manager-cache: false
 
       - name: Install pnpm
         shell: bash
         run: |
           npm install -g corepack@0.35.0
           corepack enable
-          corepack prepare pnpm@10.12.2 --activate
+          corepack prepare pnpm@10.33.1 --activate
 
       - name: Set up Socket Firewall
         uses: socketdev/action@937f824ec476dfd164d4a4d9995751427b0be143  # v1
@@ -285,8 +289,10 @@ jobs:
         run: ls -la shield-*
 
       - name: Create Release
-        uses: softprops/action-gh-release@a06a81a03ee405af7f2048a818ed3f03bbf83c7b
-        with:
-          files: shield-*
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "${GITHUB_REF_NAME}" shield-* \
+            --repo "${GITHUB_REPOSITORY}" \
+            --title "${GITHUB_REF_NAME}" \
+            --generate-notes
