@@ -233,9 +233,6 @@ export class ERC4626Validator extends BaseEVMValidator {
 
     // WRAP must send ETH value
     const value = BigInt(tx.value ?? '0');
-    if (value === 0n) {
-      return this.blocked('WRAP transaction must send ETH value');
-    }
 
     // Parse the wrap calldata
     const result = this.parseAndValidateCalldata(
@@ -254,7 +251,7 @@ export class ERC4626Validator extends BaseEVMValidator {
       });
     }
 
-    return this.safe();
+    return this.safe(value === 0n ? ['ZERO_AMOUNT'] : undefined);
   }
 
   /**
@@ -306,9 +303,6 @@ export class ERC4626Validator extends BaseEVMValidator {
     // Both deposit and mint have receiver as second parameter
     const [amount, receiver] = parsed.args;
     const amountBigInt = BigInt(amount);
-    if (amountBigInt === 0n) {
-      return this.blocked('Supply amount is zero');
-    }
 
     // Validate receiver is the intended receiver
     const expectedReceiver = receiverAddress ?? userAddress;
@@ -320,7 +314,7 @@ export class ERC4626Validator extends BaseEVMValidator {
       });
     }
 
-    return this.safe();
+    return this.safe(amountBigInt === 0n ? ['ZERO_AMOUNT'] : undefined);
   }
 
   /**
@@ -372,9 +366,6 @@ export class ERC4626Validator extends BaseEVMValidator {
     // Both withdraw and redeem have: (amount, receiver, owner)
     const [amount, receiver, owner] = parsed.args;
     const amountBigInt = BigInt(amount);
-    if (amountBigInt === 0n) {
-      return this.blocked('Withdraw amount is zero');
-    }
 
     // Validate owner is the user (they must own the shares)
     if (owner.toLowerCase() !== userAddress.toLowerCase()) {
@@ -393,7 +384,7 @@ export class ERC4626Validator extends BaseEVMValidator {
       });
     }
 
-    return this.safe();
+    return this.safe(amountBigInt === 0n ? ['ZERO_AMOUNT'] : undefined);
   }
 
   /**
@@ -451,14 +442,10 @@ export class ERC4626Validator extends BaseEVMValidator {
       });
     }
 
-    // Validate amount is not zero
     const [amount] = parsed.args;
     const amountBigInt = BigInt(amount);
-    if (amountBigInt === 0n) {
-      return this.blocked('UNWRAP amount is zero');
-    }
 
-    return this.safe();
+    return this.safe(amountBigInt === 0n ? ['ZERO_AMOUNT'] : undefined);
   }
 
   private resolveVault(
