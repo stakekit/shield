@@ -100,7 +100,7 @@ export class ERC4626Validator extends BaseEVMValidator {
     transactionType: TransactionType,
     userAddress: string,
     args?: ActionArguments,
-    _context?: ValidationContext,
+    context?: ValidationContext,
   ): ValidationResult {
     const decoded = this.decodeEVMTransaction(unsignedTransaction);
     if (!decoded.isValid || !decoded.transaction) {
@@ -137,9 +137,9 @@ export class ERC4626Validator extends BaseEVMValidator {
       case TransactionType.WRAP:
         return this.validateWrap(tx, chainId);
       case TransactionType.SUPPLY:
-        return this.validateSupply(tx, userAddress, chainId, receiverAddress);
+        return this.validateSupply(tx, userAddress, chainId, receiverAddress, context);
       case TransactionType.WITHDRAW:
-        return this.validateWithdraw(tx, userAddress, chainId, receiverAddress);
+        return this.validateWithdraw(tx, userAddress, chainId, receiverAddress, context);
       case TransactionType.UNWRAP:
         return this.validateUnwrap(tx, chainId);
       default:
@@ -464,32 +464,26 @@ export class ERC4626Validator extends BaseEVMValidator {
   private resolveVault(
     tx: EVMTransaction,
     chainId: number,
+    context?: ValidationContext,
   ): { vaultInfo: VaultInfo } | { error: ValidationResult } {
     const vaultAddress = tx.to?.toLowerCase();
     if (!vaultAddress) {
       return { error: this.blocked('Transaction has no destination address') };
     }
-
-    if (!this.vaultInfoMap.has(`${chainId}:${vaultAddress}`)) {
-      return {
-        error: this.blocked('Vault address not whitelisted', {
-          vaultAddress,
-          chainId,
-        }),
-      };
+    const staticVault = this.vaultInfoMap.get(`${chainId}:${vaultAddress}`);
+    if (staticVault) return { vaultInfo: staticVault };
+    // Runtime, DB-sourced OAV: accept if injected via context
+    if (this.getInjectedAllocatorVaults(context).has(vaultAddress)) {
+      const base = this.getBaseVaultForChain(chainId);
+      if (base) {
+        return {
+          vaultInfo: { ...base, address: vaultAddress },
+        };
+      }
     }
-
-    const vaultInfo = this.vaultInfoMap.get(`${chainId}:${vaultAddress}`);
-    if (!vaultInfo) {
-      return {
-        error: this.blocked('Vault address not whitelisted', {
-          vaultAddress,
-          chainId,
-        }),
-      };
-    }
-
-    return { vaultInfo };
+    return {
+      error: this.blocked('Vault address not whitelisted', { vaultAddress, chainId }),
+    };
   }
 
   /**
@@ -498,5 +492,24 @@ export class ERC4626Validator extends BaseEVMValidator {
    */
   private getWethAddress(chainId: number): string | null {
     return WETH_ADDRESSES[chainId] || null;
+  }
+
+  private getInjectedAllocatorVaults(context?: ValidationContext): Set<string> {
+    const injected = new Set<string>();
+    for (const fee of context?.feeConfiguration ?? []) {
+      if (isNonEmptyString(fee.allocatorVaultAddress)) {
+        injected.add(fee.allocatorVaultAddress.toLowerCase());
+      }
+    }
+    return injected;
+  }
+
+  // The instance is yield-scoped to one base vault; use it as the template
+  // for a context-injected OAV (input token + protocol metadata).
+  private getBaseVaultForChain(chainId: number): VaultInfo | undefined {
+    for (const vault of this.vaultInfoMap.values()) {
+      if (vault.chainId === chainId) return vault;
+    }
+    return undefined;
   }
 }
