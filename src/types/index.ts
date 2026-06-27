@@ -16,6 +16,7 @@ export interface ValidationResult {
 
 export type ActionArguments = {
   amount?: string;
+  decimals?: number; // declared-amount token decimals (intent context)
   validatorAddress?: string;
   validatorAddresses?: string[];
   tronResource?: TronResourceType;

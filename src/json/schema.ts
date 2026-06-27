@@ -41,6 +41,7 @@ export const requestSchema = {
 
         // Future use - include for forward compatibility
         amount: { type: 'string', maxLength: 78 }, // Max uint256 is 78 digits
+        decimals: { type: 'integer', minimum: 0, maximum: 255 },
         tronResource: { type: 'string', enum: ['BANDWIDTH', 'ENERGY'] },
         providerId: { type: 'string', maxLength: 256 },
         duration: { type: 'number', minimum: 0 },
