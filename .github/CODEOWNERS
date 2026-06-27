@@ -1,5 +1,5 @@
 # Workflow/CI files specifically
-.github/ @ajag408 @Philippoes @petar-omni @jdomingos @raiseerco
+.github/ @ajag408 @Philippoes @jdomingos @raiseerco
 
 # Supply chain critical files -- lockfile, install config, package manifest
 .npmrc @ajag408 @Philippoes @jdomingos @raiseerco
