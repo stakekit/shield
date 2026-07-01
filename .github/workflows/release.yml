@@ -217,8 +217,13 @@ jobs:
         env:
           SOCKET_SECURITY_API_KEY: ${{ secrets.SOCKET_SECURITY_API_KEY }}
 
-      - name: Install dependencies
+      - name: Install dependencies (Unix — Socket Firewall)
+        if: matrix.platform != 'win32'
         run: sfw pnpm install --frozen-lockfile
+        
+      - name: Install dependencies (Windows — sfw breaks pnpm install on win32)
+        if: matrix.platform == 'win32'
+        run: pnpm install --frozen-lockfile
 
       - name: Build TypeScript
         run: pnpm build
