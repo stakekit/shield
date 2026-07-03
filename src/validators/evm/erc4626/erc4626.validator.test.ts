@@ -19,6 +19,7 @@ const ALLOCATOR_VAULT_ADDRESS = '0xa110ca7040000000000000000000000000000001';
 const MORPHO_VAULT_ADDRESS = '0x00000000000000000000000000000000000face2';
 const RECEIVER_ADDRESS = '0x2222222222222222222222222222222222222222';
 const CHAIN_ID = 42161; // Arbitrum
+const DEPOSIT_WEI = ethers.parseUnits('1000', 6); // 1000 USDC (6 decimals)
 
 // ---------------------------------------------------------------------------
 // ABI interfaces for building calldata
@@ -38,6 +39,12 @@ const erc4626Iface = new ethers.Interface([
   'function mint(uint256 shares, address receiver) returns (uint256)',
   'function withdraw(uint256 assets, address receiver, address owner) returns (uint256)',
   'function redeem(uint256 shares, address receiver, address owner) returns (uint256)',
+]);
+
+// Sky/Spark Savings referral overloads
+const erc4626ReferralIface = new ethers.Interface([
+  'function deposit(uint256 assets, address receiver, uint16 referral) returns (uint256)',
+  'function mint(uint256 shares, address receiver, uint16 referral) returns (uint256)',
 ]);
 
 // ---------------------------------------------------------------------------
@@ -514,6 +521,110 @@ describe('ERC4626Validator', () => {
       );
       expect(result.isValid).toBe(false);
       expect(result.reason).toContain('zero');
+    });
+    // -----------------------------------------------------------------------
+    // Sky/Spark referral overloads — deposit/mint(..., uint16 referral)
+    // -----------------------------------------------------------------------
+    describe('referral overloads (uint16)', () => {
+      it.each([
+        [3008, 'Sky Ethereum ref code'],
+        [200, 'Spark L2 ref code'],
+        [0, 'zero referral'],
+        [65535, 'uint16 max'],
+      ])(
+        'should validate a valid 3-arg deposit with referral %i (%s) — accept-any',
+        (referral) => {
+          const data = erc4626ReferralIface.encodeFunctionData('deposit', [
+            DEPOSIT_WEI,
+            USER_ADDRESS,
+            referral,
+          ]);
+          const tx = buildTx({ to: VAULT_ADDRESS, data, value: '0x0' });
+          const result = validator.validate(
+            tx,
+            TransactionType.SUPPLY,
+            USER_ADDRESS,
+          );
+          expect(result.isValid).toBe(true);
+        },
+      );
+      it('should validate a valid 3-arg mint (no declared amount)', () => {
+        const data = erc4626ReferralIface.encodeFunctionData('mint', [
+          ethers.parseUnits('500', 18),
+          USER_ADDRESS,
+          3008,
+        ]);
+        const tx = buildTx({ to: VAULT_ADDRESS, data, value: '0x0' });
+        const result = validator.validate(
+          tx,
+          TransactionType.SUPPLY,
+          USER_ADDRESS,
+        );
+        expect(result.isValid).toBe(true);
+      });
+      it('should reject 3-arg deposit when receiver != user', () => {
+        const data = erc4626ReferralIface.encodeFunctionData('deposit', [
+          DEPOSIT_WEI,
+          MALICIOUS_ADDRESS, // receiver redirected
+          3008,
+        ]);
+        const tx = buildTx({ to: VAULT_ADDRESS, data, value: '0x0' });
+        const result = validator.validate(
+          tx,
+          TransactionType.SUPPLY,
+          USER_ADDRESS,
+        );
+        expect(result.isValid).toBe(false);
+        expect(result.reason).toContain('Receiver address does not match');
+      });
+      it('should reject tampered 3-arg calldata (appended bytes)', () => {
+        // Also regression-covers the fragment-based tamper re-encode in
+        // BaseEVMValidator (name-based lookup throws on overloaded ABIs).
+        const data = erc4626ReferralIface.encodeFunctionData('deposit', [
+          DEPOSIT_WEI,
+          USER_ADDRESS,
+          3008,
+        ]);
+        const tampered = data + 'deadbeef';
+        const tx = buildTx({ to: VAULT_ADDRESS, data: tampered, value: '0x0' });
+        const result = validator.validate(
+          tx,
+          TransactionType.SUPPLY,
+          USER_ADDRESS,
+        );
+        expect(result.isValid).toBe(false);
+        expect(result.reason).toContain('tampered');
+      });
+      it('should reject zero-amount 3-arg deposit', () => {
+        const data = erc4626ReferralIface.encodeFunctionData('deposit', [
+          0,
+          USER_ADDRESS,
+          3008,
+        ]);
+        const tx = buildTx({ to: VAULT_ADDRESS, data, value: '0x0' });
+        const result = validator.validate(
+          tx,
+          TransactionType.SUPPLY,
+          USER_ADDRESS,
+        );
+        expect(result.isValid).toBe(false);
+        expect(result.reason).toContain('zero');
+      });
+      it('should reject 3-arg deposit to non-whitelisted vault', () => {
+        const data = erc4626ReferralIface.encodeFunctionData('deposit', [
+          DEPOSIT_WEI,
+          USER_ADDRESS,
+          3008,
+        ]);
+        const tx = buildTx({ to: MALICIOUS_ADDRESS, data, value: '0x0' });
+        const result = validator.validate(
+          tx,
+          TransactionType.SUPPLY,
+          USER_ADDRESS,
+        );
+        expect(result.isValid).toBe(false);
+        expect(result.reason).toContain('not whitelisted');
+      });
     });
   });
 

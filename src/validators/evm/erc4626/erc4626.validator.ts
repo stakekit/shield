@@ -16,6 +16,9 @@ import { isNonEmptyString } from '../../../utils/validation';
 const ERC4626_ABI = [
   'function deposit(uint256 assets, address receiver) returns (uint256)',
   'function mint(uint256 shares, address receiver) returns (uint256)',
+  // Sky/Spark Savings referral overloads (sUSDS, sUSDC, sDAI …).
+  'function deposit(uint256 assets, address receiver, uint16 referral) returns (uint256)',
+  'function mint(uint256 shares, address receiver, uint16 referral) returns (uint256)',
   'function withdraw(uint256 assets, address receiver, address owner) returns (uint256)',
   'function redeem(uint256 shares, address receiver, address owner) returns (uint256)',
 ];

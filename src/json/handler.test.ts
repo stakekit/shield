@@ -159,6 +159,78 @@ describe('handleJsonRequest', () => {
     });
   });
 
+  describe('ENG-3841: sUSDS referral deposit (client repro, real registry)', () => {
+    // deposit(uint256 assets, address receiver, uint16 referral), selector 0x9b8d6d38
+    const susdsYieldId =
+      'ethereum-usds-susds-0xa3931d71877c0e7a3148cb7eb4463524fec27fbd-4626-vault';
+    const susdsUserAddress = '0xA87D2b790668d51023A3A354a4FEAd156A37dd27';
+    const DEPOSIT_REFERRAL_SELECTOR = '0x9b8d6d38';
+    // 9986836000000000000 wei (9.986836 USDS)
+    const ASSETS_WORD =
+      '0000000000000000000000000000000000000000000000008a985e6df2154000';
+    // receiver = user
+    const RECEIVER_WORD =
+      '000000000000000000000000a87d2b790668d51023a3a354a4fead156a37dd27';
+    // referral = 3008 (0xbc0, Sky Ethereum ref code)
+    const REFERRAL_WORD =
+      '0000000000000000000000000000000000000000000000000000000000000bc0';
+    // The ticket's unsignedTransaction, verbatim
+    const susdsSupplyTx = {
+      from: susdsUserAddress,
+      gasLimit: '0x0f4240',
+      to: '0xa3931d71877C0E7a3148CB7Eb4463524FEc27fbD', // sUSDS vault
+      data:
+        DEPOSIT_REFERRAL_SELECTOR + ASSETS_WORD + RECEIVER_WORD + REFERRAL_WORD,
+      nonce: 67,
+      type: 2,
+      maxFeePerGas: '0x272417a9',
+      maxPriorityFeePerGas: '0x09f815',
+      chainId: 1,
+    };
+    it('should validate the client’s exact rejected SUPPLY transaction as SAFE', () => {
+      const response = call({
+        apiVersion: '1.0',
+        operation: 'validate',
+        yieldId: susdsYieldId,
+        unsignedTransaction: JSON.stringify(susdsSupplyTx),
+        userAddress: susdsUserAddress,
+      });
+      expect(response.ok).toBe(true);
+      expect(response.result.isValid).toBe(true);
+      expect(response.result.detectedType).toBe('SUPPLY');
+    });
+    it('should reject the same calldata with the receiver word redirected', () => {
+      const attackerWord =
+        '000000000000000000000000000000000000000000000000000000000000bad1';
+      const tamperedTx = {
+        ...susdsSupplyTx,
+        data:
+          DEPOSIT_REFERRAL_SELECTOR +
+          ASSETS_WORD +
+          attackerWord +
+          REFERRAL_WORD,
+      };
+      const response = call({
+        apiVersion: '1.0',
+        operation: 'validate',
+        yieldId: susdsYieldId,
+        unsignedTransaction: JSON.stringify(tamperedTx),
+        userAddress: susdsUserAddress,
+      });
+      expect(response.ok).toBe(true); // request succeeded
+      expect(response.result.isValid).toBe(false); // but validation blocked
+      expect(response.result.reason).toContain(
+        'No matching operation pattern found',
+      );
+      const supplyAttempt = response.result.details?.attempts?.find(
+        (a: { type: string; reason?: string }) => a.type === 'SUPPLY',
+      );
+      expect(supplyAttempt?.reason).toContain(
+        'Receiver address does not match',
+      );
+    });
+  });
+
   describe('optional parameters: args and context', () => {
     const userAddress = '0x742d35cc6634c0532925a3b844bc9e7595f0beb8';
     const referralAddress = '0x371240E80Bf84eC2bA8b55aE2fD0B467b16Db2be';
