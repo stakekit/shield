@@ -10,8 +10,6 @@ import { VaultInfo, VaultConfiguration } from './types';
 import { WETH_ADDRESSES } from './constants';
 import { isNonEmptyString } from '../../../utils/validation';
 import {
-  // exceedsDeclaredAmount,
-  // isInfiniteApproval,
   matchesDeclaredAmount,
 } from '../../../utils/amount';
 
