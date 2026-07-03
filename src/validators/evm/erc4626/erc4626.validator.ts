@@ -9,9 +9,7 @@ import { BaseEVMValidator, EVMTransaction } from '../base.validator';
 import { VaultInfo, VaultConfiguration } from './types';
 import { WETH_ADDRESSES } from './constants';
 import { isNonEmptyString } from '../../../utils/validation';
-import {
-  matchesDeclaredAmount,
-} from '../../../utils/amount';
+import { matchesDeclaredAmount } from '../../../utils/amount';
 
 /**
  * Standard ERC4626 ABI - only the functions we need to validate
