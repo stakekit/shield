@@ -136,6 +136,16 @@ export class ERC4626Validator extends BaseEVMValidator {
       ? args.amount
       : undefined;
 
+    // Declared amount is a base-unit (wei) integer string — same unit as calldata.
+    // Reject anything else explicitly (e.g. human-readable "0.01") rather than
+    // letting BigInt() throw into a generic parse-error block.
+    if (declaredAmount !== undefined && !/^[0-9]+$/.test(declaredAmount)) {
+      return this.blocked(
+        'Declared amount must be a base-unit integer string (wei)',
+        { declared: declaredAmount },
+      );
+    }
+
     // Route to appropriate validation based on transaction type
     switch (transactionType) {
       case TransactionType.APPROVAL:

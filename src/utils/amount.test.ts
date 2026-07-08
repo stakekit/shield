@@ -43,7 +43,7 @@ describe('matchesDeclaredAmount', () => {
     expect(matchesDeclaredAmount(0n, '0')).toBe(true);
   });
 
-  it('throws on a malformed declared string (fail-safe: Shield.validate catches per-type throws)', () => {
+  it('throws on a non-integer declared string (defense-in-depth: unreachable via schema pattern + validator guard, which reject non-digit amounts first)', () => {
     expect(() => matchesDeclaredAmount(1000000n, '1.5')).toThrow();
     expect(() => matchesDeclaredAmount(1000000n, 'abc')).toThrow();
   });

@@ -762,6 +762,28 @@ describe('ERC4626Validator', () => {
         );
         expect(result.isValid).toBe(true);
       });
+      it('blocks a human-readable declared amount ("0.01") with an explicit reason', () => {
+        const result = validator.validate(
+          depositTx(DEPOSIT_WEI),
+          TransactionType.SUPPLY,
+          USER_ADDRESS,
+          { amount: '0.01', decimals: 6 },
+        );
+        expect(result.isValid).toBe(false);
+        expect(result.reason).toContain(
+          'Declared amount must be a base-unit integer string (wei)',
+        );
+      });
+      it('blocks a non-numeric declared amount before any type-specific validation', () => {
+        const result = validator.validate(
+          depositTx(DEPOSIT_WEI),
+          TransactionType.APPROVAL, // guard fires pre-routing, type is irrelevant
+          USER_ADDRESS,
+          { amount: 'abc' },
+        );
+        expect(result.isValid).toBe(false);
+        expect(result.reason).toContain('base-unit integer string');
+      });
     });
   });
 

@@ -299,6 +299,16 @@ describe('handleJsonRequest', () => {
       expect(response.ok).toBe(false);
       expect(response.error.code).toBe('SCHEMA_VALIDATION_ERROR');
     });
+    it('rejects human-readable args.amount ("0.01") — base-unit integers only', () => {
+      const response = call(validRequest({ amount: '0.01', decimals: 6 }));
+      expect(response.ok).toBe(false);
+      expect(response.error.code).toBe('SCHEMA_VALIDATION_ERROR');
+    });
+    it('rejects non-numeric args.amount', () => {
+      const response = call(validRequest({ amount: '1,000' }));
+      expect(response.ok).toBe(false);
+      expect(response.error.code).toBe('SCHEMA_VALIDATION_ERROR');
+    });
   });
 
   describe('isSupported operation', () => {
