@@ -15,7 +15,10 @@ export interface ValidationResult {
 }
 
 export type ActionArguments = {
+  /** Declared intent amount in base units (wei) — must exactly match calldata units. Integer string. */
   amount?: string;
+  /** Informational only: token decimals for the declared amount. Not used in comparison. */
+  decimals?: number;
   validatorAddress?: string;
   validatorAddresses?: string[];
   tronResource?: TronResourceType;
