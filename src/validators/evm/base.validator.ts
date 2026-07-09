@@ -147,7 +147,7 @@ export abstract class BaseEVMValidator extends BaseValidator {
     try {
       // Re-encode the function call with the parsed arguments
       const expectedCalldata = iface.encodeFunctionData(
-        parsedTx.name,
+        parsedTx.fragment,
         parsedTx.args,
       );
 
