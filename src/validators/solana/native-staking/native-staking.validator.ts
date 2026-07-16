@@ -29,6 +29,7 @@ export class SolanaNativeStakingValidator extends BaseValidator {
       TransactionType.WITHDRAW,
       TransactionType.WITHDRAW_ALL,
       TransactionType.SPLIT,
+      TransactionType.MERGE,
     ];
   }
   validate(
@@ -58,6 +59,8 @@ export class SolanaNativeStakingValidator extends BaseValidator {
         return this.validateWithdrawAll(instructions, userAddress);
       case TransactionType.SPLIT:
         return this.validateSplit(instructions, userAddress);
+      case TransactionType.MERGE:
+        return this.validateMerge(instructions, userAddress);
       default:
         return this.blocked('Unsupported transaction type', {
           transactionType,
@@ -202,6 +205,51 @@ export class SolanaNativeStakingValidator extends BaseValidator {
       if (deactivate.accounts.at(2)?.pubkey.toBase58() !== userAddress) {
         return this.blocked(
           `Deactivate authority for instruction ${i} is not user address`,
+        );
+      }
+    }
+
+    return this.safe();
+  }
+
+  private validateMerge(
+    instructions: DecodedInstruction[],
+    userAddress: string,
+  ): ValidationResult {
+    const minInstructions = 3;
+    const maxInstructions = 12;
+
+    if (
+      instructions.length < minInstructions ||
+      instructions.length > maxInstructions
+    ) {
+      return this.blocked('Invalid instruction count for MERGE', {
+        expectedRange: `${minInstructions}-${maxInstructions}`,
+        actual: instructions.length,
+      });
+    }
+
+    if (
+      !this.isComputeBudgetInstruction(instructions[0], 'SetComputeUnitLimit')
+    ) {
+      return this.blocked('Missing or invalid SetComputeUnitLimit');
+    }
+    if (
+      !this.isComputeBudgetInstruction(instructions[1], 'SetComputeUnitPrice')
+    ) {
+      return this.blocked('Missing or invalid SetComputeUnitPrice');
+    }
+
+    for (let i = 2; i < instructions.length; i++) {
+      const merge = instructions[i];
+      if (!this.isStakeInstruction(merge, 'Merge')) {
+        return this.blocked(`Instruction ${i} must be a Merge instruction`, {
+          actual: merge.instructionType,
+        });
+      }
+      if (merge.accounts.at(4)?.pubkey.toBase58() !== userAddress) {
+        return this.blocked(
+          `Merge authority for instruction ${i} is not user address`,
         );
       }
     }
@@ -445,6 +493,8 @@ export class SolanaNativeStakingValidator extends BaseValidator {
           return 'Withdraw';
         case 5:
           return 'Deactivate';
+        case 7:
+          return 'Merge';
         case 10:
           return 'CreateAccountWithSeed';
         default:

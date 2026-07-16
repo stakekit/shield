@@ -1006,6 +1006,333 @@ describe('SolanaNativeStakingValidator via Shield', () => {
     });
   });
 
+  describe('MERGE validation', () => {
+    const destinationStake = new PublicKey(
+      'HzcH95P8DJnmjWfNLKeWYrNSYuMrbAGcp6MhXwWfeezk',
+    );
+    const sourceStakes = [
+      new PublicKey('9ZmDXFKKaLb5ct3cqbfqHzJPaag4KbZdk3HgAVfCWpMc'),
+      new PublicKey('2ejUissotvQJda8tnD9iqYbdSuz6Gv6dxDnZE8hEKwr5'),
+      new PublicKey('HaAebbtwqajTNEBJ2ys3yxWJXk6fi7tk7WXpvj6hMEXZ'),
+    ];
+
+    it('should reject MERGE with too few instructions', () => {
+      const userPubkey = new PublicKey(userAddress);
+
+      const transaction = new Transaction();
+      transaction.add(
+        ComputeBudgetProgram.setComputeUnitLimit({ units: 350000 }),
+      );
+      transaction.add(
+        ComputeBudgetProgram.setComputeUnitPrice({ microLamports: 1 }),
+      );
+
+      transaction.recentBlockhash = '11111111111111111111111111111111';
+      transaction.feePayer = userPubkey;
+      const txHex = transaction
+        .serialize({ requireAllSignatures: false, verifySignatures: false })
+        .toString('hex');
+
+      const result = shield.validate({
+        yieldId,
+        unsignedTransaction: txHex,
+        userAddress,
+      });
+
+      expect(result.isValid).toBe(false);
+      expect(result.reason).toContain('No matching operation pattern found');
+      expect(
+        result.details?.attempts?.some((attempt) =>
+          attempt.reason?.includes('Invalid instruction count for MERGE'),
+        ),
+      ).toBe(true);
+    });
+
+    it('should reject MERGE with too many instructions', () => {
+      const userPubkey = new PublicKey(userAddress);
+
+      const transaction = new Transaction();
+      transaction.add(
+        ComputeBudgetProgram.setComputeUnitLimit({ units: 350000 }),
+      );
+      transaction.add(
+        ComputeBudgetProgram.setComputeUnitPrice({ microLamports: 1 }),
+      );
+
+      Array.from({ length: 11 }, (_, i) =>
+        transaction.add(
+          StakeProgram.merge({
+            stakePubkey: destinationStake,
+            sourceStakePubKey: sourceStakes[i % sourceStakes.length],
+            authorizedPubkey: userPubkey,
+          }),
+        ),
+      );
+
+      transaction.recentBlockhash = '11111111111111111111111111111111';
+      transaction.feePayer = userPubkey;
+      const txHex = transaction
+        .serialize({ requireAllSignatures: false, verifySignatures: false })
+        .toString('hex');
+
+      const result = shield.validate({
+        yieldId,
+        unsignedTransaction: txHex,
+        userAddress,
+      });
+
+      expect(result.isValid).toBe(false);
+      expect(result.reason).toContain('No matching operation pattern found');
+      expect(
+        result.details?.attempts?.some((attempt) =>
+          attempt.reason?.includes('Invalid instruction count for MERGE'),
+        ),
+      ).toBe(true);
+    });
+
+    it('should reject MERGE with missing SetComputeUnitLimit', () => {
+      const userPubkey = new PublicKey(userAddress);
+
+      const transaction = new Transaction();
+      transaction.add(
+        ComputeBudgetProgram.setComputeUnitPrice({ microLamports: 1 }),
+      );
+      transaction.add(
+        StakeProgram.merge({
+          stakePubkey: destinationStake,
+          sourceStakePubKey: sourceStakes[0],
+          authorizedPubkey: userPubkey,
+        }),
+        StakeProgram.merge({
+          stakePubkey: destinationStake,
+          sourceStakePubKey: sourceStakes[1],
+          authorizedPubkey: userPubkey,
+        }),
+      );
+
+      transaction.recentBlockhash = '11111111111111111111111111111111';
+      transaction.feePayer = userPubkey;
+      const txHex = transaction
+        .serialize({ requireAllSignatures: false, verifySignatures: false })
+        .toString('hex');
+
+      const result = shield.validate({
+        yieldId,
+        unsignedTransaction: txHex,
+        userAddress,
+      });
+
+      expect(result.isValid).toBe(false);
+      expect(result.reason).toContain('No matching operation pattern found');
+      expect(
+        result.details?.attempts?.some((attempt) =>
+          attempt.reason?.includes('Missing or invalid SetComputeUnitLimit'),
+        ),
+      ).toBe(true);
+    });
+
+    it('should reject MERGE with missing SetComputeUnitPrice', () => {
+      const userPubkey = new PublicKey(userAddress);
+
+      const transaction = new Transaction();
+      transaction.add(
+        ComputeBudgetProgram.setComputeUnitLimit({ units: 350000 }),
+      );
+      transaction.add(
+        StakeProgram.merge({
+          stakePubkey: destinationStake,
+          sourceStakePubKey: sourceStakes[0],
+          authorizedPubkey: userPubkey,
+        }),
+        StakeProgram.merge({
+          stakePubkey: destinationStake,
+          sourceStakePubKey: sourceStakes[1],
+          authorizedPubkey: userPubkey,
+        }),
+      );
+
+      transaction.recentBlockhash = '11111111111111111111111111111111';
+      transaction.feePayer = userPubkey;
+      const txHex = transaction
+        .serialize({ requireAllSignatures: false, verifySignatures: false })
+        .toString('hex');
+
+      const result = shield.validate({
+        yieldId,
+        unsignedTransaction: txHex,
+        userAddress,
+      });
+
+      expect(result.isValid).toBe(false);
+      expect(result.reason).toContain('No matching operation pattern found');
+      expect(
+        result.details?.attempts?.some((attempt) =>
+          attempt.reason?.includes('Missing or invalid SetComputeUnitPrice'),
+        ),
+      ).toBe(true);
+    });
+
+    it('should reject MERGE with non-Merge instruction in loop', () => {
+      const userPubkey = new PublicKey(userAddress);
+
+      const transaction = new Transaction();
+      transaction.add(
+        ComputeBudgetProgram.setComputeUnitLimit({ units: 350000 }),
+      );
+      transaction.add(
+        ComputeBudgetProgram.setComputeUnitPrice({ microLamports: 1 }),
+      );
+      transaction.add(
+        StakeProgram.merge({
+          stakePubkey: destinationStake,
+          sourceStakePubKey: sourceStakes[0],
+          authorizedPubkey: userPubkey,
+        }),
+      );
+      transaction.add(
+        SystemProgram.transfer({
+          fromPubkey: userPubkey,
+          toPubkey: userPubkey,
+          lamports: 1000,
+        }),
+      );
+
+      transaction.recentBlockhash = '11111111111111111111111111111111';
+      transaction.feePayer = userPubkey;
+      const txHex = transaction
+        .serialize({ requireAllSignatures: false, verifySignatures: false })
+        .toString('hex');
+
+      const result = shield.validate({
+        yieldId,
+        unsignedTransaction: txHex,
+        userAddress,
+      });
+
+      expect(result.isValid).toBe(false);
+      expect(result.reason).toContain('No matching operation pattern found');
+      expect(
+        result.details?.attempts?.some((attempt) =>
+          attempt.reason?.includes('Instruction 3 must be a Merge instruction'),
+        ),
+      ).toBe(true);
+    });
+
+    it('should accept valid single MERGE transaction', () => {
+      const userPubkey = new PublicKey(userAddress);
+
+      const transaction = new Transaction();
+      transaction.add(
+        ComputeBudgetProgram.setComputeUnitLimit({ units: 350000 }),
+      );
+      transaction.add(
+        ComputeBudgetProgram.setComputeUnitPrice({ microLamports: 1 }),
+      );
+      transaction.add(
+        StakeProgram.merge({
+          stakePubkey: destinationStake,
+          sourceStakePubKey: sourceStakes[0],
+          authorizedPubkey: userPubkey,
+        }),
+      );
+
+      transaction.recentBlockhash = '11111111111111111111111111111111';
+      transaction.feePayer = userPubkey;
+      const txHex = transaction
+        .serialize({ requireAllSignatures: false, verifySignatures: false })
+        .toString('hex');
+
+      const result = shield.validate({
+        yieldId,
+        unsignedTransaction: txHex,
+        userAddress,
+      });
+
+      expect(result.isValid).toBe(true);
+      expect(result.detectedType).toBe(TransactionType.MERGE);
+    });
+
+    it('should accept valid batch MERGE transaction', () => {
+      const userPubkey = new PublicKey(userAddress);
+
+      const transaction = new Transaction();
+      transaction.add(
+        ComputeBudgetProgram.setComputeUnitLimit({ units: 350000 }),
+      );
+      transaction.add(
+        ComputeBudgetProgram.setComputeUnitPrice({ microLamports: 1 }),
+      );
+      Array.from({ length: sourceStakes.length }, (_, i) =>
+        transaction.add(
+          StakeProgram.merge({
+            stakePubkey: destinationStake,
+            sourceStakePubKey: sourceStakes[i],
+            authorizedPubkey: userPubkey,
+          }),
+        ),
+      );
+
+      transaction.recentBlockhash = '11111111111111111111111111111111';
+      transaction.feePayer = userPubkey;
+      const txHex = transaction
+        .serialize({ requireAllSignatures: false, verifySignatures: false })
+        .toString('hex');
+
+      const result = shield.validate({
+        yieldId,
+        unsignedTransaction: txHex,
+        userAddress,
+      });
+
+      expect(result.isValid).toBe(true);
+      expect(result.detectedType).toBe(TransactionType.MERGE);
+    });
+
+    it('should reject MERGE with wrong authority', () => {
+      const userPubkey = new PublicKey(userAddress);
+      const maliciousPubkey = new PublicKey(
+        '2ejUissotvQJda8tnD9iqYbdSuz6Gv6dxDnZE8hEKwr5',
+      );
+
+      const transaction = new Transaction();
+      transaction.add(
+        ComputeBudgetProgram.setComputeUnitLimit({ units: 350000 }),
+      );
+      transaction.add(
+        ComputeBudgetProgram.setComputeUnitPrice({ microLamports: 1 }),
+      );
+      transaction.add(
+        StakeProgram.merge({
+          stakePubkey: destinationStake,
+          sourceStakePubKey: sourceStakes[0],
+          authorizedPubkey: maliciousPubkey,
+        }),
+      );
+
+      transaction.recentBlockhash = '11111111111111111111111111111111';
+      transaction.feePayer = userPubkey;
+      const txHex = transaction
+        .serialize({ requireAllSignatures: false, verifySignatures: false })
+        .toString('hex');
+
+      const result = shield.validate({
+        yieldId,
+        unsignedTransaction: txHex,
+        userAddress,
+      });
+
+      expect(result.isValid).toBe(false);
+      expect(result.reason).toContain('No matching operation pattern found');
+      expect(
+        result.details?.attempts?.some((attempt) =>
+          attempt.reason?.includes(
+            'Merge authority for instruction 2 is not user address',
+          ),
+        ),
+      ).toBe(true);
+    });
+  });
+
   describe('WITHDRAW validation', () => {
     it('should reject WITHDRAW with wrong instruction count', () => {
       const userPubkey = new PublicKey(userAddress);
