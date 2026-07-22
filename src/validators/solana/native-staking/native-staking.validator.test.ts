@@ -1016,6 +1016,12 @@ describe('SolanaNativeStakingValidator via Shield', () => {
       new PublicKey('HaAebbtwqajTNEBJ2ys3yxWJXk6fi7tk7WXpvj6hMEXZ'),
     ];
 
+    const mergeArgs = (
+      accounts: PublicKey[] = [destinationStake, sourceStakes[0]],
+    ) => ({
+      stakeAccounts: accounts.map((a) => a.toBase58()),
+    });
+
     it('should reject MERGE with too few instructions', () => {
       const userPubkey = new PublicKey(userAddress);
 
@@ -1037,6 +1043,7 @@ describe('SolanaNativeStakingValidator via Shield', () => {
         yieldId,
         unsignedTransaction: txHex,
         userAddress,
+        args: mergeArgs(),
       });
 
       expect(result.isValid).toBe(false);
@@ -1079,6 +1086,7 @@ describe('SolanaNativeStakingValidator via Shield', () => {
         yieldId,
         unsignedTransaction: txHex,
         userAddress,
+        args: mergeArgs([destinationStake, ...sourceStakes]),
       });
 
       expect(result.isValid).toBe(false);
@@ -1120,6 +1128,7 @@ describe('SolanaNativeStakingValidator via Shield', () => {
         yieldId,
         unsignedTransaction: txHex,
         userAddress,
+        args: mergeArgs([destinationStake, sourceStakes[0], sourceStakes[1]]),
       });
 
       expect(result.isValid).toBe(false);
@@ -1161,6 +1170,7 @@ describe('SolanaNativeStakingValidator via Shield', () => {
         yieldId,
         unsignedTransaction: txHex,
         userAddress,
+        args: mergeArgs([destinationStake, sourceStakes[0], sourceStakes[1]]),
       });
 
       expect(result.isValid).toBe(false);
@@ -1207,6 +1217,7 @@ describe('SolanaNativeStakingValidator via Shield', () => {
         yieldId,
         unsignedTransaction: txHex,
         userAddress,
+        args: mergeArgs([destinationStake, sourceStakes[0]]),
       });
 
       expect(result.isValid).toBe(false);
@@ -1214,6 +1225,134 @@ describe('SolanaNativeStakingValidator via Shield', () => {
       expect(
         result.details?.attempts?.some((attempt) =>
           attempt.reason?.includes('Instruction 3 must be a Merge instruction'),
+        ),
+      ).toBe(true);
+    });
+
+    it('should reject MERGE without stakeAccounts argument', () => {
+      const userPubkey = new PublicKey(userAddress);
+
+      const transaction = new Transaction();
+      transaction.add(
+        ComputeBudgetProgram.setComputeUnitLimit({ units: 350000 }),
+      );
+      transaction.add(
+        ComputeBudgetProgram.setComputeUnitPrice({ microLamports: 1 }),
+      );
+      transaction.add(
+        StakeProgram.merge({
+          stakePubkey: destinationStake,
+          sourceStakePubKey: sourceStakes[0],
+          authorizedPubkey: userPubkey,
+        }),
+      );
+
+      transaction.recentBlockhash = '11111111111111111111111111111111';
+      transaction.feePayer = userPubkey;
+      const txHex = transaction
+        .serialize({ requireAllSignatures: false, verifySignatures: false })
+        .toString('hex');
+
+      const result = shield.validate({
+        yieldId,
+        unsignedTransaction: txHex,
+        userAddress,
+      });
+
+      expect(result.isValid).toBe(false);
+      expect(result.reason).toContain('No matching operation pattern found');
+      expect(
+        result.details?.attempts?.some((attempt) =>
+          attempt.reason?.includes(
+            'Missing required stakeAccounts argument for MERGE',
+          ),
+        ),
+      ).toBe(true);
+    });
+
+    it('should reject MERGE with destination not in stakeAccounts', () => {
+      const userPubkey = new PublicKey(userAddress);
+      const attackerDestination = new PublicKey(
+        'BbM5kJgrwEj3tYFfBPnjcARB54wDUHkXmLUTkazUmt2x',
+      );
+
+      const transaction = new Transaction();
+      transaction.add(
+        ComputeBudgetProgram.setComputeUnitLimit({ units: 350000 }),
+      );
+      transaction.add(
+        ComputeBudgetProgram.setComputeUnitPrice({ microLamports: 1 }),
+      );
+      transaction.add(
+        StakeProgram.merge({
+          stakePubkey: attackerDestination,
+          sourceStakePubKey: sourceStakes[0],
+          authorizedPubkey: userPubkey,
+        }),
+      );
+
+      transaction.recentBlockhash = '11111111111111111111111111111111';
+      transaction.feePayer = userPubkey;
+      const txHex = transaction
+        .serialize({ requireAllSignatures: false, verifySignatures: false })
+        .toString('hex');
+
+      const result = shield.validate({
+        yieldId,
+        unsignedTransaction: txHex,
+        userAddress,
+        args: mergeArgs([destinationStake, sourceStakes[0]]),
+      });
+
+      expect(result.isValid).toBe(false);
+      expect(result.reason).toContain('No matching operation pattern found');
+      expect(
+        result.details?.attempts?.some((attempt) =>
+          attempt.reason?.includes(
+            'Merge destination for instruction 2 is not in stakeAccounts',
+          ),
+        ),
+      ).toBe(true);
+    });
+
+    it('should reject MERGE with source not in stakeAccounts', () => {
+      const userPubkey = new PublicKey(userAddress);
+
+      const transaction = new Transaction();
+      transaction.add(
+        ComputeBudgetProgram.setComputeUnitLimit({ units: 350000 }),
+      );
+      transaction.add(
+        ComputeBudgetProgram.setComputeUnitPrice({ microLamports: 1 }),
+      );
+      transaction.add(
+        StakeProgram.merge({
+          stakePubkey: destinationStake,
+          sourceStakePubKey: sourceStakes[1],
+          authorizedPubkey: userPubkey,
+        }),
+      );
+
+      transaction.recentBlockhash = '11111111111111111111111111111111';
+      transaction.feePayer = userPubkey;
+      const txHex = transaction
+        .serialize({ requireAllSignatures: false, verifySignatures: false })
+        .toString('hex');
+
+      const result = shield.validate({
+        yieldId,
+        unsignedTransaction: txHex,
+        userAddress,
+        args: mergeArgs([destinationStake, sourceStakes[0]]),
+      });
+
+      expect(result.isValid).toBe(false);
+      expect(result.reason).toContain('No matching operation pattern found');
+      expect(
+        result.details?.attempts?.some((attempt) =>
+          attempt.reason?.includes(
+            'Merge source for instruction 2 is not in stakeAccounts',
+          ),
         ),
       ).toBe(true);
     });
@@ -1246,6 +1385,7 @@ describe('SolanaNativeStakingValidator via Shield', () => {
         yieldId,
         unsignedTransaction: txHex,
         userAddress,
+        args: mergeArgs(),
       });
 
       expect(result.isValid).toBe(true);
@@ -1282,6 +1422,42 @@ describe('SolanaNativeStakingValidator via Shield', () => {
         yieldId,
         unsignedTransaction: txHex,
         userAddress,
+        args: mergeArgs([destinationStake, ...sourceStakes]),
+      });
+
+      expect(result.isValid).toBe(true);
+      expect(result.detectedType).toBe(TransactionType.MERGE);
+    });
+
+    it('should accept MERGE when stakeAccounts includes unused accounts', () => {
+      const userPubkey = new PublicKey(userAddress);
+
+      const transaction = new Transaction();
+      transaction.add(
+        ComputeBudgetProgram.setComputeUnitLimit({ units: 350000 }),
+      );
+      transaction.add(
+        ComputeBudgetProgram.setComputeUnitPrice({ microLamports: 1 }),
+      );
+      transaction.add(
+        StakeProgram.merge({
+          stakePubkey: destinationStake,
+          sourceStakePubKey: sourceStakes[0],
+          authorizedPubkey: userPubkey,
+        }),
+      );
+
+      transaction.recentBlockhash = '11111111111111111111111111111111';
+      transaction.feePayer = userPubkey;
+      const txHex = transaction
+        .serialize({ requireAllSignatures: false, verifySignatures: false })
+        .toString('hex');
+
+      const result = shield.validate({
+        yieldId,
+        unsignedTransaction: txHex,
+        userAddress,
+        args: mergeArgs([destinationStake, ...sourceStakes]),
       });
 
       expect(result.isValid).toBe(true);
@@ -1319,6 +1495,7 @@ describe('SolanaNativeStakingValidator via Shield', () => {
         yieldId,
         unsignedTransaction: txHex,
         userAddress,
+        args: mergeArgs(),
       });
 
       expect(result.isValid).toBe(false);

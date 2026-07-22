@@ -57,6 +57,11 @@ export const requestSchema = {
           items: { type: 'string', maxLength: 256 },
           maxItems: 100,
         },
+        stakeAccounts: {
+          type: 'array',
+          items: { type: 'string', maxLength: 128 },
+          maxItems: 100,
+        },
       },
     },
     context: {

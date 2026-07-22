@@ -32,6 +32,11 @@ export type ActionArguments = {
   nominatorAddress?: string;
   receiverAddress?: string;
   nftIds?: string[];
+  /**
+   * Solana MERGE: signer-controlled stake account pubkeys.
+   * Destination and source of every merge instruction must be in this list.
+   */
+  stakeAccounts?: string[];
 };
 
 export interface FeeConfiguration {
