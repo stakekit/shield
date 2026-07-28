@@ -1229,7 +1229,7 @@ describe('SolanaNativeStakingValidator via Shield', () => {
       ).toBe(true);
     });
 
-    it('should reject MERGE without stakeAccounts argument', () => {
+    it('should accept MERGE without stakeAccounts argument', () => {
       const userPubkey = new PublicKey(userAddress);
 
       const transaction = new Transaction();
@@ -1259,15 +1259,8 @@ describe('SolanaNativeStakingValidator via Shield', () => {
         userAddress,
       });
 
-      expect(result.isValid).toBe(false);
-      expect(result.reason).toContain('No matching operation pattern found');
-      expect(
-        result.details?.attempts?.some((attempt) =>
-          attempt.reason?.includes(
-            'Missing required stakeAccounts argument for MERGE',
-          ),
-        ),
-      ).toBe(true);
+      expect(result.isValid).toBe(true);
+      expect(result.detectedType).toBe(TransactionType.MERGE);
     });
 
     it('should reject MERGE with destination not in stakeAccounts', () => {

@@ -241,16 +241,17 @@ export class SolanaNativeStakingValidator extends BaseValidator {
       return this.blocked('Missing or invalid SetComputeUnitPrice');
     }
 
-    if (
-      isNullOrUndefined(args) ||
-      isNullOrUndefined(args.stakeAccounts) ||
-      args.stakeAccounts.length === 0 ||
-      !args.stakeAccounts.every(isNonEmptyString)
-    ) {
-      return this.blocked('Missing required stakeAccounts argument for MERGE');
+    const stakeAccounts = args?.stakeAccounts;
+    const enforceStakeAccountsAllowlist =
+      !isNullOrUndefined(stakeAccounts) && stakeAccounts.length > 0;
+
+    if (enforceStakeAccountsAllowlist && !stakeAccounts.every(isNonEmptyString)) {
+      return this.blocked('Invalid stakeAccounts argument for MERGE');
     }
 
-    const allowedStakeAccounts = new Set(args.stakeAccounts);
+    const allowedStakeAccounts = enforceStakeAccountsAllowlist
+      ? new Set(stakeAccounts)
+      : undefined;
 
     for (let i = 2; i < instructions.length; i++) {
       const merge = instructions[i];
@@ -265,29 +266,31 @@ export class SolanaNativeStakingValidator extends BaseValidator {
         );
       }
 
-      const destination = merge.accounts.at(0)?.pubkey.toBase58();
-      if (
-        isNullOrUndefined(destination) ||
-        !allowedStakeAccounts.has(destination)
-      ) {
-        return this.blocked(
-          `Merge destination for instruction ${i} is not in stakeAccounts`,
-          {
-            expected: args.stakeAccounts,
-            actual: destination,
-          },
-        );
-      }
+      if (!isNullOrUndefined(allowedStakeAccounts)) {
+        const destination = merge.accounts.at(0)?.pubkey.toBase58();
+        if (
+          isNullOrUndefined(destination) ||
+          !allowedStakeAccounts.has(destination)
+        ) {
+          return this.blocked(
+            `Merge destination for instruction ${i} is not in stakeAccounts`,
+            {
+              expected: stakeAccounts,
+              actual: destination,
+            },
+          );
+        }
 
-      const source = merge.accounts.at(1)?.pubkey.toBase58();
-      if (isNullOrUndefined(source) || !allowedStakeAccounts.has(source)) {
-        return this.blocked(
-          `Merge source for instruction ${i} is not in stakeAccounts`,
-          {
-            expected: args.stakeAccounts,
-            actual: source,
-          },
-        );
+        const source = merge.accounts.at(1)?.pubkey.toBase58();
+        if (isNullOrUndefined(source) || !allowedStakeAccounts.has(source)) {
+          return this.blocked(
+            `Merge source for instruction ${i} is not in stakeAccounts`,
+            {
+              expected: stakeAccounts,
+              actual: source,
+            },
+          );
+        }
       }
     }
 
