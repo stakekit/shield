@@ -58,7 +58,7 @@ export class SolanaNativeStakingValidator extends BaseValidator {
       case TransactionType.WITHDRAW_ALL:
         return this.validateWithdrawAll(instructions, userAddress);
       case TransactionType.SPLIT:
-        return this.validateSplit(instructions, userAddress);
+        return this.validateSplit(instructions, userAddress, args);
       case TransactionType.MERGE:
         return this.validateMerge(instructions, userAddress, args);
       default:
@@ -245,7 +245,10 @@ export class SolanaNativeStakingValidator extends BaseValidator {
     const enforceStakeAccountsAllowlist =
       !isNullOrUndefined(stakeAccounts) && stakeAccounts.length > 0;
 
-    if (enforceStakeAccountsAllowlist && !stakeAccounts.every(isNonEmptyString)) {
+    if (
+      enforceStakeAccountsAllowlist &&
+      !stakeAccounts.every(isNonEmptyString)
+    ) {
       return this.blocked('Invalid stakeAccounts argument for MERGE');
     }
 
@@ -374,10 +377,19 @@ export class SolanaNativeStakingValidator extends BaseValidator {
   private validateSplit(
     instructions: DecodedInstruction[],
     userAddress: string,
+    args?: ActionArguments,
   ): ValidationResult {
-    if (instructions.length !== 6) {
+    const splitTailLength = 4;
+    const maxMerges = 10;
+    const minInstructions = 2 + splitTailLength;
+    const maxInstructions = 2 + maxMerges + splitTailLength;
+
+    if (
+      instructions.length < minInstructions ||
+      instructions.length > maxInstructions
+    ) {
       return this.blocked('Invalid instruction count for SPLIT', {
-        expected: 6,
+        expectedRange: `${minInstructions}-${maxInstructions}`,
         actual: instructions.length,
       });
     }
@@ -393,8 +405,87 @@ export class SolanaNativeStakingValidator extends BaseValidator {
       return this.blocked('Missing or invalid SetComputeUnitPrice');
     }
 
-    const allocateWithSeed = instructions[2];
-    if (!this.isSystemInstruction(instructions[2], 'AllocateWithSeed')) {
+    const stakeAccounts = args?.stakeAccounts;
+    const enforceStakeAccountsAllowlist =
+      !isNullOrUndefined(stakeAccounts) && stakeAccounts.length > 0;
+
+    if (
+      enforceStakeAccountsAllowlist &&
+      !stakeAccounts.every(isNonEmptyString)
+    ) {
+      return this.blocked('Invalid stakeAccounts argument for SPLIT');
+    }
+
+    const allowedStakeAccounts = enforceStakeAccountsAllowlist
+      ? new Set(stakeAccounts)
+      : undefined;
+
+    let idx = 2;
+    const mergeDestinations: string[] = [];
+
+    while (idx < instructions.length - splitTailLength) {
+      const merge = instructions[idx];
+      if (!this.isStakeInstruction(merge, 'Merge')) {
+        break;
+      }
+      if (mergeDestinations.length >= maxMerges) {
+        return this.blocked('Too many Merge instructions before SPLIT', {
+          max: maxMerges,
+        });
+      }
+      if (merge.accounts.at(4)?.pubkey.toBase58() !== userAddress) {
+        return this.blocked(
+          `Merge authority for instruction ${idx} is not user address`,
+        );
+      }
+
+      const destination = merge.accounts.at(0)?.pubkey.toBase58();
+      const source = merge.accounts.at(1)?.pubkey.toBase58();
+
+      if (!isNullOrUndefined(allowedStakeAccounts)) {
+        if (
+          isNullOrUndefined(destination) ||
+          !allowedStakeAccounts.has(destination)
+        ) {
+          return this.blocked(
+            `Merge destination for instruction ${idx} is not in stakeAccounts`,
+            {
+              expected: stakeAccounts,
+              actual: destination,
+            },
+          );
+        }
+        if (isNullOrUndefined(source) || !allowedStakeAccounts.has(source)) {
+          return this.blocked(
+            `Merge source for instruction ${idx} is not in stakeAccounts`,
+            {
+              expected: stakeAccounts,
+              actual: source,
+            },
+          );
+        }
+      }
+
+      if (isNullOrUndefined(destination)) {
+        return this.blocked(`Missing merge destination for instruction ${idx}`);
+      }
+      mergeDestinations.push(destination);
+      idx++;
+    }
+
+    if (instructions.length - idx !== splitTailLength) {
+      return this.blocked(
+        'Invalid SPLIT instruction layout after Merge prefix',
+        {
+          expectedRemaining: splitTailLength,
+          actualRemaining: instructions.length - idx,
+          mergeCount: mergeDestinations.length,
+        },
+      );
+    }
+
+    const allocateWithSeed = instructions[idx++];
+    if (!this.isSystemInstruction(allocateWithSeed, 'AllocateWithSeed')) {
       return this.blocked('Missing or invalid AllocateWithSeed');
     }
 
@@ -403,7 +494,7 @@ export class SolanaNativeStakingValidator extends BaseValidator {
       return this.blocked('AllocateWithSeed source is not user address');
     }
 
-    const transfer = instructions[3];
+    const transfer = instructions[idx++];
     if (!this.isSystemInstruction(transfer, 'Transfer')) {
       return this.blocked('Missing or invalid Transfer');
     }
@@ -416,7 +507,7 @@ export class SolanaNativeStakingValidator extends BaseValidator {
       );
     }
 
-    const split = instructions[4];
+    const split = instructions[idx++];
     if (!this.isStakeInstruction(split, 'Split')) {
       return this.blocked('Missing or invalid Split instruction');
     }
@@ -427,6 +518,19 @@ export class SolanaNativeStakingValidator extends BaseValidator {
     }
     if (split.accounts.at(2)?.pubkey.toBase58() !== userAddress) {
       return this.blocked('Split authority is not user address');
+    }
+
+    const splitSource = split.accounts.at(0)?.pubkey.toBase58();
+    for (const destination of mergeDestinations) {
+      if (destination !== splitSource) {
+        return this.blocked(
+          'Merge destination does not match Split source stake account',
+          {
+            mergeDestination: destination,
+            splitSource,
+          },
+        );
+      }
     }
 
     const transferRecipient = transfer.accounts.at(1)?.pubkey;
@@ -445,7 +549,7 @@ export class SolanaNativeStakingValidator extends BaseValidator {
       );
     }
 
-    const deactivate = instructions[5];
+    const deactivate = instructions[idx];
 
     if (!this.isStakeInstruction(deactivate, 'Deactivate')) {
       return this.blocked('Missing or invalid Deactivate instruction');

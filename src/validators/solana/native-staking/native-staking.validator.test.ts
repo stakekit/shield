@@ -3133,6 +3133,593 @@ describe('SolanaNativeStakingValidator via Shield', () => {
       expect(result.detectedType).toBe(TransactionType.SPLIT);
     });
 
+    it('should accept SPLIT with 1 leading Merge', () => {
+      const userPubkey = new PublicKey(userAddress);
+      const sourceStake = new PublicKey(
+        'HzcH95P8DJnmjWfNLKeWYrNSYuMrbAGcp6MhXwWfeezk',
+      );
+      const mergeSource = new PublicKey(
+        '2ejUissotvQJda8tnD9iqYbdSuz6Gv6dxDnZE8hEKwr5',
+      );
+      const newStake = new PublicKey(
+        '9ZmDXFKKaLb5ct3cqbfqHzJPaag4KbZdk3HgAVfCWpMc',
+      );
+
+      const transaction = new Transaction();
+      transaction.add(
+        ComputeBudgetProgram.setComputeUnitLimit({ units: 350000 }),
+      );
+      transaction.add(
+        ComputeBudgetProgram.setComputeUnitPrice({ microLamports: 1 }),
+      );
+      transaction.add(
+        StakeProgram.merge({
+          stakePubkey: sourceStake,
+          sourceStakePubKey: mergeSource,
+          authorizedPubkey: userPubkey,
+        }),
+      );
+
+      const splitWithSeedTx = StakeProgram.splitWithSeed(
+        {
+          stakePubkey: sourceStake,
+          authorizedPubkey: userPubkey,
+          splitStakePubkey: newStake,
+          basePubkey: userPubkey,
+          seed: 'split',
+          lamports: 50000000,
+        },
+        2282880,
+      );
+      transaction.add(...splitWithSeedTx.instructions);
+      transaction.add(
+        StakeProgram.deactivate({
+          stakePubkey: newStake,
+          authorizedPubkey: userPubkey,
+        }),
+      );
+
+      transaction.recentBlockhash = '11111111111111111111111111111111';
+      transaction.feePayer = userPubkey;
+      const txHex = transaction
+        .serialize({ requireAllSignatures: false, verifySignatures: false })
+        .toString('hex');
+
+      const result = shield.validate({
+        yieldId,
+        unsignedTransaction: txHex,
+        userAddress,
+      });
+
+      expect(result.isValid).toBe(true);
+      expect(result.detectedType).toBe(TransactionType.SPLIT);
+    });
+
+    it('should accept SPLIT with 2 leading Merges', () => {
+      const userPubkey = new PublicKey(userAddress);
+      const sourceStake = new PublicKey(
+        'HzcH95P8DJnmjWfNLKeWYrNSYuMrbAGcp6MhXwWfeezk',
+      );
+      const mergeSources = [
+        new PublicKey('2ejUissotvQJda8tnD9iqYbdSuz6Gv6dxDnZE8hEKwr5'),
+        new PublicKey('HaAebbtwqajTNEBJ2ys3yxWJXk6fi7tk7WXpvj6hMEXZ'),
+      ];
+      const newStake = new PublicKey(
+        '9ZmDXFKKaLb5ct3cqbfqHzJPaag4KbZdk3HgAVfCWpMc',
+      );
+
+      const transaction = new Transaction();
+      transaction.add(
+        ComputeBudgetProgram.setComputeUnitLimit({ units: 350000 }),
+      );
+      transaction.add(
+        ComputeBudgetProgram.setComputeUnitPrice({ microLamports: 1 }),
+      );
+      Array.from({ length: mergeSources.length }, (_, i) =>
+        transaction.add(
+          StakeProgram.merge({
+            stakePubkey: sourceStake,
+            sourceStakePubKey: mergeSources[i],
+            authorizedPubkey: userPubkey,
+          }),
+        ),
+      );
+
+      const splitWithSeedTx = StakeProgram.splitWithSeed(
+        {
+          stakePubkey: sourceStake,
+          authorizedPubkey: userPubkey,
+          splitStakePubkey: newStake,
+          basePubkey: userPubkey,
+          seed: 'split',
+          lamports: 50000000,
+        },
+        2282880,
+      );
+      transaction.add(...splitWithSeedTx.instructions);
+      transaction.add(
+        StakeProgram.deactivate({
+          stakePubkey: newStake,
+          authorizedPubkey: userPubkey,
+        }),
+      );
+
+      transaction.recentBlockhash = '11111111111111111111111111111111';
+      transaction.feePayer = userPubkey;
+      const txHex = transaction
+        .serialize({ requireAllSignatures: false, verifySignatures: false })
+        .toString('hex');
+
+      const result = shield.validate({
+        yieldId,
+        unsignedTransaction: txHex,
+        userAddress,
+      });
+
+      expect(result.isValid).toBe(true);
+      expect(result.detectedType).toBe(TransactionType.SPLIT);
+    });
+
+    it('should reject SPLIT with Merge authority not user address', () => {
+      const userPubkey = new PublicKey(userAddress);
+      const maliciousPubkey = new PublicKey(
+        'BbM5kJgrwEj3tYFfBPnjcARB54wDUHkXmLUTkazUmt2x',
+      );
+      const sourceStake = new PublicKey(
+        'HzcH95P8DJnmjWfNLKeWYrNSYuMrbAGcp6MhXwWfeezk',
+      );
+      const mergeSource = new PublicKey(
+        '2ejUissotvQJda8tnD9iqYbdSuz6Gv6dxDnZE8hEKwr5',
+      );
+      const newStake = new PublicKey(
+        '9ZmDXFKKaLb5ct3cqbfqHzJPaag4KbZdk3HgAVfCWpMc',
+      );
+
+      const transaction = new Transaction();
+      transaction.add(
+        ComputeBudgetProgram.setComputeUnitLimit({ units: 350000 }),
+      );
+      transaction.add(
+        ComputeBudgetProgram.setComputeUnitPrice({ microLamports: 1 }),
+      );
+      transaction.add(
+        StakeProgram.merge({
+          stakePubkey: sourceStake,
+          sourceStakePubKey: mergeSource,
+          authorizedPubkey: maliciousPubkey,
+        }),
+      );
+
+      const splitWithSeedTx = StakeProgram.splitWithSeed(
+        {
+          stakePubkey: sourceStake,
+          authorizedPubkey: userPubkey,
+          splitStakePubkey: newStake,
+          basePubkey: userPubkey,
+          seed: 'split',
+          lamports: 50000000,
+        },
+        2282880,
+      );
+      transaction.add(...splitWithSeedTx.instructions);
+      transaction.add(
+        StakeProgram.deactivate({
+          stakePubkey: newStake,
+          authorizedPubkey: userPubkey,
+        }),
+      );
+
+      transaction.recentBlockhash = '11111111111111111111111111111111';
+      transaction.feePayer = userPubkey;
+      const txHex = transaction
+        .serialize({ requireAllSignatures: false, verifySignatures: false })
+        .toString('hex');
+
+      const result = shield.validate({
+        yieldId,
+        unsignedTransaction: txHex,
+        userAddress,
+      });
+
+      expect(result.isValid).toBe(false);
+      expect(result.reason).toContain('No matching operation pattern found');
+      expect(
+        result.details?.attempts?.some((attempt) =>
+          attempt.reason?.includes(
+            'Merge authority for instruction 2 is not user address',
+          ),
+        ),
+      ).toBe(true);
+    });
+
+    it('should reject SPLIT when Merge destination does not match Split source', () => {
+      const userPubkey = new PublicKey(userAddress);
+      const sourceStake = new PublicKey(
+        'HzcH95P8DJnmjWfNLKeWYrNSYuMrbAGcp6MhXwWfeezk',
+      );
+      const wrongMergeDestination = new PublicKey(
+        'HaAebbtwqajTNEBJ2ys3yxWJXk6fi7tk7WXpvj6hMEXZ',
+      );
+      const mergeSource = new PublicKey(
+        '2ejUissotvQJda8tnD9iqYbdSuz6Gv6dxDnZE8hEKwr5',
+      );
+      const newStake = new PublicKey(
+        '9ZmDXFKKaLb5ct3cqbfqHzJPaag4KbZdk3HgAVfCWpMc',
+      );
+
+      const transaction = new Transaction();
+      transaction.add(
+        ComputeBudgetProgram.setComputeUnitLimit({ units: 350000 }),
+      );
+      transaction.add(
+        ComputeBudgetProgram.setComputeUnitPrice({ microLamports: 1 }),
+      );
+      transaction.add(
+        StakeProgram.merge({
+          stakePubkey: wrongMergeDestination,
+          sourceStakePubKey: mergeSource,
+          authorizedPubkey: userPubkey,
+        }),
+      );
+
+      const splitWithSeedTx = StakeProgram.splitWithSeed(
+        {
+          stakePubkey: sourceStake,
+          authorizedPubkey: userPubkey,
+          splitStakePubkey: newStake,
+          basePubkey: userPubkey,
+          seed: 'split',
+          lamports: 50000000,
+        },
+        2282880,
+      );
+      transaction.add(...splitWithSeedTx.instructions);
+      transaction.add(
+        StakeProgram.deactivate({
+          stakePubkey: newStake,
+          authorizedPubkey: userPubkey,
+        }),
+      );
+
+      transaction.recentBlockhash = '11111111111111111111111111111111';
+      transaction.feePayer = userPubkey;
+      const txHex = transaction
+        .serialize({ requireAllSignatures: false, verifySignatures: false })
+        .toString('hex');
+
+      const result = shield.validate({
+        yieldId,
+        unsignedTransaction: txHex,
+        userAddress,
+      });
+
+      expect(result.isValid).toBe(false);
+      expect(result.reason).toContain('No matching operation pattern found');
+      expect(
+        result.details?.attempts?.some((attempt) =>
+          attempt.reason?.includes(
+            'Merge destination does not match Split source stake account',
+          ),
+        ),
+      ).toBe(true);
+    });
+
+    it('should reject SPLIT with Merge accounts outside stakeAccounts allowlist', () => {
+      const userPubkey = new PublicKey(userAddress);
+      const sourceStake = new PublicKey(
+        'HzcH95P8DJnmjWfNLKeWYrNSYuMrbAGcp6MhXwWfeezk',
+      );
+      const mergeSource = new PublicKey(
+        '2ejUissotvQJda8tnD9iqYbdSuz6Gv6dxDnZE8hEKwr5',
+      );
+      const newStake = new PublicKey(
+        '9ZmDXFKKaLb5ct3cqbfqHzJPaag4KbZdk3HgAVfCWpMc',
+      );
+
+      const transaction = new Transaction();
+      transaction.add(
+        ComputeBudgetProgram.setComputeUnitLimit({ units: 350000 }),
+      );
+      transaction.add(
+        ComputeBudgetProgram.setComputeUnitPrice({ microLamports: 1 }),
+      );
+      transaction.add(
+        StakeProgram.merge({
+          stakePubkey: sourceStake,
+          sourceStakePubKey: mergeSource,
+          authorizedPubkey: userPubkey,
+        }),
+      );
+
+      const splitWithSeedTx = StakeProgram.splitWithSeed(
+        {
+          stakePubkey: sourceStake,
+          authorizedPubkey: userPubkey,
+          splitStakePubkey: newStake,
+          basePubkey: userPubkey,
+          seed: 'split',
+          lamports: 50000000,
+        },
+        2282880,
+      );
+      transaction.add(...splitWithSeedTx.instructions);
+      transaction.add(
+        StakeProgram.deactivate({
+          stakePubkey: newStake,
+          authorizedPubkey: userPubkey,
+        }),
+      );
+
+      transaction.recentBlockhash = '11111111111111111111111111111111';
+      transaction.feePayer = userPubkey;
+      const txHex = transaction
+        .serialize({ requireAllSignatures: false, verifySignatures: false })
+        .toString('hex');
+
+      const result = shield.validate({
+        yieldId,
+        unsignedTransaction: txHex,
+        userAddress,
+        args: {
+          stakeAccounts: [sourceStake.toBase58()],
+        },
+      });
+
+      expect(result.isValid).toBe(false);
+      expect(result.reason).toContain('No matching operation pattern found');
+      expect(
+        result.details?.attempts?.some((attempt) =>
+          attempt.reason?.includes(
+            'Merge source for instruction 2 is not in stakeAccounts',
+          ),
+        ),
+      ).toBe(true);
+    });
+
+    it('should reject SPLIT when Merge appears after AllocateWithSeed', () => {
+      const userPubkey = new PublicKey(userAddress);
+      const sourceStake = new PublicKey(
+        'HzcH95P8DJnmjWfNLKeWYrNSYuMrbAGcp6MhXwWfeezk',
+      );
+      const mergeSource = new PublicKey(
+        '2ejUissotvQJda8tnD9iqYbdSuz6Gv6dxDnZE8hEKwr5',
+      );
+      const newStake = new PublicKey(
+        '9ZmDXFKKaLb5ct3cqbfqHzJPaag4KbZdk3HgAVfCWpMc',
+      );
+
+      const transaction = new Transaction();
+      transaction.add(
+        ComputeBudgetProgram.setComputeUnitLimit({ units: 350000 }),
+      );
+      transaction.add(
+        ComputeBudgetProgram.setComputeUnitPrice({ microLamports: 1 }),
+      );
+
+      const splitWithSeedTx = StakeProgram.splitWithSeed(
+        {
+          stakePubkey: sourceStake,
+          authorizedPubkey: userPubkey,
+          splitStakePubkey: newStake,
+          basePubkey: userPubkey,
+          seed: 'split',
+          lamports: 50000000,
+        },
+        2282880,
+      );
+      transaction.add(splitWithSeedTx.instructions[0]); // AllocateWithSeed
+      transaction.add(
+        StakeProgram.merge({
+          stakePubkey: sourceStake,
+          sourceStakePubKey: mergeSource,
+          authorizedPubkey: userPubkey,
+        }),
+      );
+      transaction.add(splitWithSeedTx.instructions[1]); // Transfer
+      transaction.add(splitWithSeedTx.instructions[2]); // Split
+      transaction.add(
+        StakeProgram.deactivate({
+          stakePubkey: newStake,
+          authorizedPubkey: userPubkey,
+        }),
+      );
+
+      transaction.recentBlockhash = '11111111111111111111111111111111';
+      transaction.feePayer = userPubkey;
+      const txHex = transaction
+        .serialize({ requireAllSignatures: false, verifySignatures: false })
+        .toString('hex');
+
+      const result = shield.validate({
+        yieldId,
+        unsignedTransaction: txHex,
+        userAddress,
+      });
+
+      expect(result.isValid).toBe(false);
+      expect(result.reason).toContain('No matching operation pattern found');
+      expect(
+        result.details?.attempts?.some(
+          (attempt) =>
+            attempt.reason?.includes(
+              'Invalid SPLIT instruction layout after Merge prefix',
+            ) || attempt.reason?.includes('Missing or invalid Transfer'),
+        ),
+      ).toBe(true);
+    });
+
+    it('should reject SPLIT with more than 10 leading Merges', () => {
+      const userPubkey = new PublicKey(userAddress);
+      const sourceStake = new PublicKey(
+        'HzcH95P8DJnmjWfNLKeWYrNSYuMrbAGcp6MhXwWfeezk',
+      );
+      const mergeSource = new PublicKey(
+        '2ejUissotvQJda8tnD9iqYbdSuz6Gv6dxDnZE8hEKwr5',
+      );
+      const newStake = new PublicKey(
+        '9ZmDXFKKaLb5ct3cqbfqHzJPaag4KbZdk3HgAVfCWpMc',
+      );
+
+      const transaction = new Transaction();
+      transaction.add(
+        ComputeBudgetProgram.setComputeUnitLimit({ units: 350000 }),
+      );
+      transaction.add(
+        ComputeBudgetProgram.setComputeUnitPrice({ microLamports: 1 }),
+      );
+      Array.from({ length: 11 }, () =>
+        transaction.add(
+          StakeProgram.merge({
+            stakePubkey: sourceStake,
+            sourceStakePubKey: mergeSource,
+            authorizedPubkey: userPubkey,
+          }),
+        ),
+      );
+
+      const splitWithSeedTx = StakeProgram.splitWithSeed(
+        {
+          stakePubkey: sourceStake,
+          authorizedPubkey: userPubkey,
+          splitStakePubkey: newStake,
+          basePubkey: userPubkey,
+          seed: 'split',
+          lamports: 50000000,
+        },
+        2282880,
+      );
+      transaction.add(...splitWithSeedTx.instructions);
+      transaction.add(
+        StakeProgram.deactivate({
+          stakePubkey: newStake,
+          authorizedPubkey: userPubkey,
+        }),
+      );
+
+      transaction.recentBlockhash = '11111111111111111111111111111111';
+      transaction.feePayer = userPubkey;
+      const txHex = transaction
+        .serialize({ requireAllSignatures: false, verifySignatures: false })
+        .toString('hex');
+
+      const result = shield.validate({
+        yieldId,
+        unsignedTransaction: txHex,
+        userAddress,
+      });
+
+      expect(result.isValid).toBe(false);
+      expect(result.reason).toContain('No matching operation pattern found');
+      expect(
+        result.details?.attempts?.some((attempt) =>
+          attempt.reason?.includes('Invalid instruction count for SPLIT'),
+        ),
+      ).toBe(true);
+    });
+
+    it('should detect Merge-only transaction as MERGE not SPLIT', () => {
+      const userPubkey = new PublicKey(userAddress);
+      const destinationStake = new PublicKey(
+        'HzcH95P8DJnmjWfNLKeWYrNSYuMrbAGcp6MhXwWfeezk',
+      );
+      const sourceStake = new PublicKey(
+        '9ZmDXFKKaLb5ct3cqbfqHzJPaag4KbZdk3HgAVfCWpMc',
+      );
+
+      const transaction = new Transaction();
+      transaction.add(
+        ComputeBudgetProgram.setComputeUnitLimit({ units: 350000 }),
+      );
+      transaction.add(
+        ComputeBudgetProgram.setComputeUnitPrice({ microLamports: 1 }),
+      );
+      transaction.add(
+        StakeProgram.merge({
+          stakePubkey: destinationStake,
+          sourceStakePubKey: sourceStake,
+          authorizedPubkey: userPubkey,
+        }),
+      );
+
+      transaction.recentBlockhash = '11111111111111111111111111111111';
+      transaction.feePayer = userPubkey;
+      const txHex = transaction
+        .serialize({ requireAllSignatures: false, verifySignatures: false })
+        .toString('hex');
+
+      const result = shield.validate({
+        yieldId,
+        unsignedTransaction: txHex,
+        userAddress,
+      });
+
+      expect(result.isValid).toBe(true);
+      expect(result.detectedType).toBe(TransactionType.MERGE);
+    });
+
+    it('should not match SPLIT-with-merges as MERGE', () => {
+      const userPubkey = new PublicKey(userAddress);
+      const sourceStake = new PublicKey(
+        'HzcH95P8DJnmjWfNLKeWYrNSYuMrbAGcp6MhXwWfeezk',
+      );
+      const mergeSource = new PublicKey(
+        '2ejUissotvQJda8tnD9iqYbdSuz6Gv6dxDnZE8hEKwr5',
+      );
+      const newStake = new PublicKey(
+        '9ZmDXFKKaLb5ct3cqbfqHzJPaag4KbZdk3HgAVfCWpMc',
+      );
+
+      const transaction = new Transaction();
+      transaction.add(
+        ComputeBudgetProgram.setComputeUnitLimit({ units: 350000 }),
+      );
+      transaction.add(
+        ComputeBudgetProgram.setComputeUnitPrice({ microLamports: 1 }),
+      );
+      transaction.add(
+        StakeProgram.merge({
+          stakePubkey: sourceStake,
+          sourceStakePubKey: mergeSource,
+          authorizedPubkey: userPubkey,
+        }),
+      );
+
+      const splitWithSeedTx = StakeProgram.splitWithSeed(
+        {
+          stakePubkey: sourceStake,
+          authorizedPubkey: userPubkey,
+          splitStakePubkey: newStake,
+          basePubkey: userPubkey,
+          seed: 'split',
+          lamports: 50000000,
+        },
+        2282880,
+      );
+      transaction.add(...splitWithSeedTx.instructions);
+      transaction.add(
+        StakeProgram.deactivate({
+          stakePubkey: newStake,
+          authorizedPubkey: userPubkey,
+        }),
+      );
+
+      transaction.recentBlockhash = '11111111111111111111111111111111';
+      transaction.feePayer = userPubkey;
+      const txHex = transaction
+        .serialize({ requireAllSignatures: false, verifySignatures: false })
+        .toString('hex');
+
+      const result = shield.validate({
+        yieldId,
+        unsignedTransaction: txHex,
+        userAddress,
+      });
+
+      expect(result.isValid).toBe(true);
+      expect(result.detectedType).toBe(TransactionType.SPLIT);
+      expect(result.details?.matchedTypes).toBeUndefined();
+    });
+
     it('should reject SPLIT with Transfer to wrong recipient', () => {
       const userPubkey = new PublicKey(userAddress);
       const sourceStake = new PublicKey(
