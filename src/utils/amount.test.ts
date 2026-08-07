@@ -1,4 +1,9 @@
-import { MAX_UINT256, matchesDeclaredAmount, matchesDeclaredAmountWithinMargin, getErc4626RedeemMargin } from './amount';
+import {
+  MAX_UINT256,
+  matchesDeclaredAmount,
+  matchesDeclaredAmountWithinMargin,
+  getErc4626RedeemMargin,
+} from './amount';
 
 describe('MAX_UINT256', () => {
   it('equals 2^256 - 1', () => {
@@ -54,33 +59,47 @@ describe('matchesDeclaredAmountWithinMargin', () => {
   const MARGIN = '10';
 
   it('returns true on exact match', () => {
-    expect(matchesDeclaredAmountWithinMargin(1000n, DECLARED, MARGIN)).toBe(true);
+    expect(matchesDeclaredAmountWithinMargin(1000n, DECLARED, MARGIN)).toBe(
+      true,
+    );
   });
 
   it('returns true when calldata is within margin above declared (snap-up)', () => {
-    expect(matchesDeclaredAmountWithinMargin(1005n, DECLARED, MARGIN)).toBe(true);
+    expect(matchesDeclaredAmountWithinMargin(1005n, DECLARED, MARGIN)).toBe(
+      true,
+    );
   });
 
   it('returns true when calldata is within margin below declared (snap-down)', () => {
-    expect(matchesDeclaredAmountWithinMargin(995n, DECLARED, MARGIN)).toBe(true);
+    expect(matchesDeclaredAmountWithinMargin(995n, DECLARED, MARGIN)).toBe(
+      true,
+    );
   });
 
   it('returns false when outside margin', () => {
-    expect(matchesDeclaredAmountWithinMargin(1011n, DECLARED, MARGIN)).toBe(false);
+    expect(matchesDeclaredAmountWithinMargin(1011n, DECLARED, MARGIN)).toBe(
+      false,
+    );
   });
 
   it('returns true when declared is undefined (opt-in skip)', () => {
-    expect(matchesDeclaredAmountWithinMargin(999999n, undefined, MARGIN)).toBe(true);
+    expect(matchesDeclaredAmountWithinMargin(999999n, undefined, MARGIN)).toBe(
+      true,
+    );
   });
 
   it('throws on non-integer declared string', () => {
-    expect(() => matchesDeclaredAmountWithinMargin(1000n, '1.5', MARGIN)).toThrow();
+    expect(() =>
+      matchesDeclaredAmountWithinMargin(1000n, '1.5', MARGIN),
+    ).toThrow();
   });
 });
 
 describe('getErc4626RedeemMargin', () => {
   it('returns 10 when feeConfigurationId is absent', () => {
-    expect(getErc4626RedeemMargin({ inputTokenDecimals: 6, vaultTokenDecimals: 18 })).toBe('10');
+    expect(
+      getErc4626RedeemMargin({ inputTokenDecimals: 6, vaultTokenDecimals: 18 }),
+    ).toBe('10');
   });
 
   it('returns 10 when decimals are missing even with feeConfigurationId', () => {
@@ -96,7 +115,7 @@ describe('getErc4626RedeemMargin', () => {
       }),
     ).toBe((10n ** 13n).toString());
   });
-  
+
   it('returns 10 for equal decimals with fee (diff 0 → 10^1)', () => {
     expect(
       getErc4626RedeemMargin({

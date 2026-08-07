@@ -159,7 +159,7 @@ describe('handleJsonRequest', () => {
     });
   });
 
-  describe('ENG-3841: sUSDS referral deposit (client repro, real registry)', () => {
+  describe('sUSDS referral deposit (client repro, real registry)', () => {
     // deposit(uint256 assets, address receiver, uint16 referral), selector 0x9b8d6d38
     const susdsYieldId =
       'ethereum-usds-susds-0xa3931d71877c0e7a3148cb7eb4463524fec27fbd-4626-vault';
@@ -380,6 +380,59 @@ describe('handleJsonRequest', () => {
       const response = call(validRequest({ amount: '1,000' }));
       expect(response.ok).toBe(false);
       expect(response.error.code).toBe('SCHEMA_VALIDATION_ERROR');
+    });
+  });
+
+  describe('schema: args.shareAmount boundaries', () => {
+    const userAddress = '0x742d35cc6634c0532925a3b844bc9e7595f0beb8';
+    const referralAddress = '0x371240E80Bf84eC2bA8b55aE2fD0B467b16Db2be';
+    const validLidoStakeTx = {
+      to: '0xae7ab96520DE3A18E5e111B5EaAb095312D7fE84',
+      from: userAddress,
+      value: '0xde0b6b3a7640000',
+      data: '0xa1903eab' + referralAddress.slice(2).padStart(64, '0'),
+      chainId: 1,
+    };
+    const MAX_UINT256_STRING = (2n ** 256n - 1n).toString();
+    const validRequest = (args: object) => ({
+      apiVersion: '1.0',
+      operation: 'validate',
+      yieldId: 'ethereum-eth-lido-staking',
+      unsignedTransaction: JSON.stringify(validLidoStakeTx),
+      userAddress,
+      args,
+    });
+    it('accepts a 78-digit args.shareAmount (maxUint256)', () => {
+      expect(MAX_UINT256_STRING.length).toBe(78);
+      const response = call(validRequest({ shareAmount: MAX_UINT256_STRING }));
+      expect(response.ok).toBe(true);
+      // Lido ignores shareAmount; schema acceptance is what this pins.
+      expect(response.result.isValid).toBe(true);
+    });
+    it('rejects args.shareAmount longer than 78 characters', () => {
+      const response = call(validRequest({ shareAmount: '1'.repeat(79) }));
+      expect(response.ok).toBe(false);
+      expect(response.error.code).toBe('SCHEMA_VALIDATION_ERROR');
+    });
+    it('rejects human-readable args.shareAmount ("0.01") — base-unit integers only', () => {
+      const response = call(validRequest({ shareAmount: '0.01' }));
+      expect(response.ok).toBe(false);
+      expect(response.error.code).toBe('SCHEMA_VALIDATION_ERROR');
+    });
+    it('rejects non-numeric args.shareAmount', () => {
+      const response = call(validRequest({ shareAmount: '1,000' }));
+      expect(response.ok).toBe(false);
+      expect(response.error.code).toBe('SCHEMA_VALIDATION_ERROR');
+    });
+    // Schema stays permissive: both fields allowed at AJV layer.
+    // Semantic reject is covered in erc4626.validator.test.ts
+    // ("rejects when both amount and shareAmount are declared").
+    it('accepts both amount and shareAmount at the schema layer', () => {
+      const response = call(
+        validRequest({ amount: '1000000', shareAmount: '1000' }),
+      );
+      expect(response.ok).toBe(true);
+      expect(response.result.isValid).toBe(true); // Lido path; no ERC-4626 both-declared check
     });
   });
 

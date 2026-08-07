@@ -1039,6 +1039,185 @@ describe('ERC4626Validator', () => {
       expect(result.isValid).toBe(false);
       expect(result.reason).toContain('zero');
     });
+
+    describe('amount intent validation', () => {
+      // Asset wei — reuse enter-side scale (1000 USDC @ 6 decimals).
+      const WITHDRAW_WEI = DEPOSIT_WEI; // 1000000000n
+      const DECLARED_ASSETS = DECLARED; // '1000000000'
+      // Share wei — small integers so margin "10" (no feeConfig / no vault decimals) is easy to hit.
+      const SHARE_WEI = 1000n;
+      const DECLARED_SHARES = '1000';
+      const withdrawTx = (assets: bigint) => {
+        const data = erc4626Iface.encodeFunctionData(
+          'withdraw(uint256,address,address)',
+          [assets, USER_ADDRESS, USER_ADDRESS],
+        );
+        return buildTx({ to: VAULT_ADDRESS, data, value: '0x0' });
+      };
+      const redeemTx = (shares: bigint) => {
+        const data = erc4626Iface.encodeFunctionData(
+          'redeem(uint256,address,address)',
+          [shares, USER_ADDRESS, USER_ADDRESS],
+        );
+        return buildTx({ to: VAULT_ADDRESS, data, value: '0x0' });
+      };
+      // --- withdraw: exact match vs args.amount ---
+      it('accepts withdraw exactly matching the declared amount', () => {
+        const result = validator.validate(
+          withdrawTx(WITHDRAW_WEI),
+          TransactionType.WITHDRAW,
+          USER_ADDRESS,
+          { amount: DECLARED_ASSETS },
+        );
+        expect(result.isValid).toBe(true);
+      });
+      it('rejects withdraw one wei above the declared amount', () => {
+        const result = validator.validate(
+          withdrawTx(WITHDRAW_WEI + 1n),
+          TransactionType.WITHDRAW,
+          USER_ADDRESS,
+          { amount: DECLARED_ASSETS },
+        );
+        expect(result.isValid).toBe(false);
+        expect(result.reason).toContain('does not match declared intent');
+      });
+      it('rejects withdraw one wei below the declared amount', () => {
+        const result = validator.validate(
+          withdrawTx(WITHDRAW_WEI - 1n),
+          TransactionType.WITHDRAW,
+          USER_ADDRESS,
+          { amount: DECLARED_ASSETS },
+        );
+        expect(result.isValid).toBe(false);
+        expect(result.reason).toContain('does not match declared intent');
+      });
+      it('skips amount enforcement on withdraw when args.amount is absent (back-compat)', () => {
+        const result = validator.validate(
+          withdrawTx(WITHDRAW_WEI * 7n),
+          TransactionType.WITHDRAW,
+          USER_ADDRESS,
+        );
+        expect(result.isValid).toBe(true);
+      });
+      it('rejects withdraw when only shareAmount is declared (fail-closed, no redeem→withdraw bypass)', () => {
+        const result = validator.validate(
+          withdrawTx(WITHDRAW_WEI),
+          TransactionType.WITHDRAW,
+          USER_ADDRESS,
+          { shareAmount: DECLARED_SHARES },
+        );
+        expect(result.isValid).toBe(false);
+        expect(result.reason).toContain(
+          'Cannot verify withdraw (asset-denominated) against declared shareAmount',
+        );
+      });
+      // --- redeem: within-margin match vs args.shareAmount ---
+      // mockConfig vault has no decimals / no feeConfigurationId → margin "10"
+      it('accepts redeem exactly matching the declared shareAmount', () => {
+        const result = validator.validate(
+          redeemTx(SHARE_WEI),
+          TransactionType.WITHDRAW,
+          USER_ADDRESS,
+          { shareAmount: DECLARED_SHARES },
+        );
+        expect(result.isValid).toBe(true);
+      });
+      it('accepts redeem within margin above declared shareAmount (snap-up, Δ=5 ≤ 10)', () => {
+        const result = validator.validate(
+          redeemTx(SHARE_WEI + 5n),
+          TransactionType.WITHDRAW,
+          USER_ADDRESS,
+          { shareAmount: DECLARED_SHARES },
+        );
+        expect(result.isValid).toBe(true);
+      });
+      it('accepts redeem within margin below declared shareAmount (snap-down, Δ=5 ≤ 10)', () => {
+        const result = validator.validate(
+          redeemTx(SHARE_WEI - 5n),
+          TransactionType.WITHDRAW,
+          USER_ADDRESS,
+          { shareAmount: DECLARED_SHARES },
+        );
+        expect(result.isValid).toBe(true);
+      });
+      it('rejects redeem outside margin (Δ=11 > 10)', () => {
+        const result = validator.validate(
+          redeemTx(SHARE_WEI + 11n),
+          TransactionType.WITHDRAW,
+          USER_ADDRESS,
+          { shareAmount: DECLARED_SHARES },
+        );
+        expect(result.isValid).toBe(false);
+        expect(result.reason).toContain('does not match declared intent');
+      });
+      it('rejects redeem when only amount is declared (fail-closed, no withdraw→redeem bypass)', () => {
+        const result = validator.validate(
+          redeemTx(SHARE_WEI),
+          TransactionType.WITHDRAW,
+          USER_ADDRESS,
+          { amount: DECLARED_ASSETS },
+        );
+        expect(result.isValid).toBe(false);
+        expect(result.reason).toContain(
+          'Cannot verify redeem (share-denominated) against declared asset amount',
+        );
+      });
+      it('skips shareAmount enforcement on redeem when args.shareAmount is absent (back-compat)', () => {
+        const result = validator.validate(
+          redeemTx(SHARE_WEI * 7n),
+          TransactionType.WITHDRAW,
+          USER_ADDRESS,
+        );
+        expect(result.isValid).toBe(true);
+      });
+      // --- cross-cutting guards (fire in validate() before routing) ---
+      it('rejects when both amount and shareAmount are declared', () => {
+        const result = validator.validate(
+          withdrawTx(WITHDRAW_WEI),
+          TransactionType.WITHDRAW,
+          USER_ADDRESS,
+          { amount: DECLARED_ASSETS, shareAmount: DECLARED_SHARES },
+        );
+        expect(result.isValid).toBe(false);
+        expect(result.reason).toContain(
+          'Cannot declare both amount and shareAmount',
+        );
+      });
+      it('blocks a human-readable declared amount ("0.01") with an explicit reason', () => {
+        const result = validator.validate(
+          withdrawTx(WITHDRAW_WEI),
+          TransactionType.WITHDRAW,
+          USER_ADDRESS,
+          { amount: '0.01', decimals: 6 },
+        );
+        expect(result.isValid).toBe(false);
+        expect(result.reason).toContain(
+          'Declared amount must be a base-unit integer string (wei)',
+        );
+      });
+      it('blocks a human-readable declared shareAmount ("0.01") with an explicit reason', () => {
+        const result = validator.validate(
+          redeemTx(SHARE_WEI),
+          TransactionType.WITHDRAW,
+          USER_ADDRESS,
+          { shareAmount: '0.01' },
+        );
+        expect(result.isValid).toBe(false);
+        expect(result.reason).toContain(
+          'Declared shareAmount must be a base-unit integer string (share wei)',
+        );
+      });
+      it('blocks a non-numeric declared shareAmount before any type-specific validation', () => {
+        const result = validator.validate(
+          redeemTx(SHARE_WEI),
+          TransactionType.APPROVAL, // guard fires pre-routing; type is irrelevant
+          USER_ADDRESS,
+          { shareAmount: 'abc' },
+        );
+        expect(result.isValid).toBe(false);
+        expect(result.reason).toContain('base-unit integer string');
+      });
+    });
   });
 
   // =========================================================================

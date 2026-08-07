@@ -9,7 +9,11 @@ import { BaseEVMValidator, EVMTransaction } from '../base.validator';
 import { VaultInfo, VaultConfiguration } from './types';
 import { WETH_ADDRESSES } from './constants';
 import { isNonEmptyString } from '../../../utils/validation';
-import { matchesDeclaredAmount } from '../../../utils/amount';
+import {
+  matchesDeclaredAmount,
+  matchesDeclaredAmountWithinMargin,
+  getErc4626RedeemMargin,
+} from '../../../utils/amount';
 
 /**
  * Standard ERC4626 ABI - only the functions we need to validate
@@ -139,6 +143,10 @@ export class ERC4626Validator extends BaseEVMValidator {
       ? args.amount
       : undefined;
 
+    const declaredShareAmount = isNonEmptyString(args?.shareAmount)
+      ? args.shareAmount
+      : undefined;
+
     // Declared amount is a base-unit (wei) integer string — same unit as calldata.
     // Reject anything else explicitly (e.g. human-readable "0.01") rather than
     // letting BigInt() throw into a generic parse-error block.
@@ -147,6 +155,24 @@ export class ERC4626Validator extends BaseEVMValidator {
         'Declared amount must be a base-unit integer string (wei)',
         { declared: declaredAmount },
       );
+    }
+
+    if (
+      declaredShareAmount !== undefined &&
+      !/^[0-9]+$/.test(declaredShareAmount)
+    ) {
+      return this.blocked(
+        'Declared shareAmount must be a base-unit integer string (share wei)',
+        { declared: declaredShareAmount },
+      );
+    }
+
+    //cannot combine asset + share intents.
+    if (declaredAmount !== undefined && declaredShareAmount !== undefined) {
+      return this.blocked('Cannot declare both amount and shareAmount', {
+        amount: declaredAmount,
+        shareAmount: declaredShareAmount,
+      });
     }
 
     // Route to appropriate validation based on transaction type
@@ -164,7 +190,15 @@ export class ERC4626Validator extends BaseEVMValidator {
           declaredAmount,
         );
       case TransactionType.WITHDRAW:
-        return this.validateWithdraw(tx, userAddress, chainId, receiverAddress);
+        return this.validateWithdraw(
+          tx,
+          userAddress,
+          chainId,
+          receiverAddress,
+          declaredAmount,
+          declaredShareAmount,
+          args?.feeConfigurationId,
+        );
       case TransactionType.UNWRAP:
         return this.validateUnwrap(tx, chainId);
       default:
@@ -406,6 +440,9 @@ export class ERC4626Validator extends BaseEVMValidator {
     userAddress: string,
     chainId: number,
     receiverAddress?: string,
+    declaredAmount?: string,
+    declaredShareAmount?: string,
+    feeConfigurationId?: string,
   ): ValidationResult {
     const resolved = this.resolveVault(tx, chainId);
     if ('error' in resolved) return resolved.error;
@@ -449,6 +486,54 @@ export class ERC4626Validator extends BaseEVMValidator {
     const amountBigInt = BigInt(amount);
     if (amountBigInt === 0n) {
       return this.blocked('Withdraw amount is zero');
+    }
+
+    // --- amount intent (additive / opt-in) ---
+    if (parsed.name === 'withdraw') {
+      // share intent on asset calldata → fail-closed (no redeem↔withdraw bypass)
+      if (declaredShareAmount !== undefined) {
+        return this.blocked(
+          'Cannot verify withdraw (asset-denominated) against declared shareAmount',
+          { declared: declaredShareAmount },
+        );
+      }
+      if (!matchesDeclaredAmount(amountBigInt, declaredAmount)) {
+        return this.blocked('Withdraw amount does not match declared intent', {
+          expected: declaredAmount,
+          actual: amountBigInt.toString(),
+        });
+      }
+    } else {
+      // redeem
+      if (declaredAmount !== undefined) {
+        return this.blocked(
+          'Cannot verify redeem (share-denominated) against declared asset amount',
+          { declared: declaredAmount },
+        );
+      }
+      if (declaredShareAmount !== undefined) {
+        const margin = getErc4626RedeemMargin({
+          feeConfigurationId,
+          inputTokenDecimals: vaultInfo.inputTokenDecimals,
+          vaultTokenDecimals: vaultInfo.vaultTokenDecimals,
+        });
+        if (
+          !matchesDeclaredAmountWithinMargin(
+            amountBigInt,
+            declaredShareAmount,
+            margin,
+          )
+        ) {
+          return this.blocked(
+            'Redeem share amount does not match declared intent',
+            {
+              expected: declaredShareAmount,
+              actual: amountBigInt.toString(),
+              margin,
+            },
+          );
+        }
+      }
     }
 
     // Validate owner is the user (they must own the shares)
