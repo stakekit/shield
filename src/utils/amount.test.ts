@@ -119,7 +119,7 @@ describe('getErc4626RedeemMargin', () => {
       }),
     ).toBe((10n ** 13n).toString());
   });
-  
+
   it('returns 10 for equal decimals with gap margin (diff 0 → 10^1)', () => {
     expect(
       getErc4626RedeemMargin({
