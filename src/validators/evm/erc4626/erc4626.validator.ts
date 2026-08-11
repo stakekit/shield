@@ -13,7 +13,9 @@ import {
   matchesDeclaredAmount,
   matchesDeclaredAmountWithinMargin,
   getErc4626RedeemMargin,
+  ASSET_WITHDRAW_EXIT_MARGIN,
 } from '../../../utils/amount';
+import { isKilnFixedMarginVault } from './kiln-fixed-margin-vaults';
 
 /**
  * Standard ERC4626 ABI - only the functions we need to validate
@@ -108,7 +110,7 @@ export class ERC4626Validator extends BaseEVMValidator {
     transactionType: TransactionType,
     userAddress: string,
     args?: ActionArguments,
-    _context?: ValidationContext,
+    context?: ValidationContext,
   ): ValidationResult {
     const decoded = this.decodeEVMTransaction(unsignedTransaction);
     if (!decoded.isValid || !decoded.transaction) {
@@ -197,7 +199,7 @@ export class ERC4626Validator extends BaseEVMValidator {
           receiverAddress,
           declaredAmount,
           declaredShareAmount,
-          args?.feeConfigurationId,
+          context,
         );
       case TransactionType.UNWRAP:
         return this.validateUnwrap(tx, chainId);
@@ -442,7 +444,7 @@ export class ERC4626Validator extends BaseEVMValidator {
     receiverAddress?: string,
     declaredAmount?: string,
     declaredShareAmount?: string,
-    feeConfigurationId?: string,
+    context?: ValidationContext,
   ): ValidationResult {
     const resolved = this.resolveVault(tx, chainId);
     if ('error' in resolved) return resolved.error;
@@ -497,10 +499,17 @@ export class ERC4626Validator extends BaseEVMValidator {
           { declared: declaredShareAmount },
         );
       }
-      if (!matchesDeclaredAmount(amountBigInt, declaredAmount)) {
+      if (
+        !matchesDeclaredAmountWithinMargin(
+          amountBigInt,
+          declaredAmount,
+          ASSET_WITHDRAW_EXIT_MARGIN,
+        )
+      ) {
         return this.blocked('Withdraw amount does not match declared intent', {
           expected: declaredAmount,
           actual: amountBigInt.toString(),
+          margin: ASSET_WITHDRAW_EXIT_MARGIN,
         });
       }
     } else {
@@ -513,7 +522,9 @@ export class ERC4626Validator extends BaseEVMValidator {
       }
       if (declaredShareAmount !== undefined) {
         const margin = getErc4626RedeemMargin({
-          feeConfigurationId,
+          useDecimalGapMargin:
+            this.isAllocatorTarget(tx.to!, vaultInfo, context) &&
+            !isKilnFixedMarginVault(tx.to!),
           inputTokenDecimals: vaultInfo.inputTokenDecimals,
           vaultTokenDecimals: vaultInfo.vaultTokenDecimals,
         });
@@ -650,6 +661,20 @@ export class ERC4626Validator extends BaseEVMValidator {
     }
 
     return { vaultInfo };
+  }
+
+  private isAllocatorTarget(
+    txTo: string,
+    vaultInfo: VaultInfo,
+    context?: ValidationContext,
+  ): boolean {
+    const to = txTo.toLowerCase();
+    if (vaultInfo.allocatorVaults?.includes(to)) return true;
+    return (
+      context?.feeConfiguration?.some(
+        (fc) => fc.allocatorVaultAddress?.toLowerCase() === to,
+      ) === true
+    );
   }
 
   /**

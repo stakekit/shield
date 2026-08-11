@@ -96,30 +96,34 @@ describe('matchesDeclaredAmountWithinMargin', () => {
 });
 
 describe('getErc4626RedeemMargin', () => {
-  it('returns 10 when feeConfigurationId is absent', () => {
+  it('returns 10 when useDecimalGapMargin is false', () => {
     expect(
-      getErc4626RedeemMargin({ inputTokenDecimals: 6, vaultTokenDecimals: 18 }),
+      getErc4626RedeemMargin({
+        useDecimalGapMargin: false,
+        inputTokenDecimals: 6,
+        vaultTokenDecimals: 18,
+      }),
     ).toBe('10');
   });
 
-  it('returns 10 when decimals are missing even with feeConfigurationId', () => {
-    expect(getErc4626RedeemMargin({ feeConfigurationId: 'fee-1' })).toBe('10');
+  it('returns 10 when decimals are missing even with useDecimalGapMargin', () => {
+    expect(getErc4626RedeemMargin({ useDecimalGapMargin: true })).toBe('10');
   });
 
-  it('returns 10^(abs(diff)+1) when fee + decimals present (6 vs 18 → 10^13)', () => {
+  it('returns 10^(abs(diff)+1) when gap margin + decimals (6 vs 18 → 10^13)', () => {
     expect(
       getErc4626RedeemMargin({
-        feeConfigurationId: 'fee-1',
+        useDecimalGapMargin: true,
         inputTokenDecimals: 6,
         vaultTokenDecimals: 18,
       }),
     ).toBe((10n ** 13n).toString());
   });
-
-  it('returns 10 for equal decimals with fee (diff 0 → 10^1)', () => {
+  
+  it('returns 10 for equal decimals with gap margin (diff 0 → 10^1)', () => {
     expect(
       getErc4626RedeemMargin({
-        feeConfigurationId: 'fee-1',
+        useDecimalGapMargin: true,
         inputTokenDecimals: 18,
         vaultTokenDecimals: 18,
       }),

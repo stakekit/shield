@@ -21,6 +21,11 @@ const RECEIVER_ADDRESS = '0x2222222222222222222222222222222222222222';
 const CHAIN_ID = 42161; // Arbitrum
 const DEPOSIT_WEI = ethers.parseUnits('1000', 6); // 1000 USDC
 const DECLARED = DEPOSIT_WEI.toString(); // '1000000000'
+// Context-only OAV: registered as its own vault so resolveVault works, but NOT in allocatorVaults
+const CONTEXT_ALLOCATOR = '0xc011e10000000000000000000000000000000003';
+// Real kiln-set address (from monorepo list) used as allocator on a 6/18 vault
+const KILN_ALLOCATOR = '0x75e4ce661a49b6bfb2d5b1a8231e32ab47f8b706';
+const KILN_PARENT_VAULT = '0xfee1000000000000000000000000000000000004';
 
 // ---------------------------------------------------------------------------
 // ABI interfaces for building calldata
@@ -102,6 +107,38 @@ const mockConfig: VaultConfiguration = {
       canEnter: true,
       canExit: true,
       allocatorVaults: [ALLOCATOR_VAULT_ADDRESS],
+      inputTokenDecimals: 6,
+      vaultTokenDecimals: 18,
+    },
+    {
+      address: CONTEXT_ALLOCATOR.toLowerCase(),
+      chainId: CHAIN_ID,
+      protocol: 'morpho',
+      yieldId: 'arbitrum-usdc-context-oav-vault',
+      inputTokenAddress: INPUT_TOKEN.toLowerCase(),
+      vaultTokenAddress: CONTEXT_ALLOCATOR.toLowerCase(),
+      network: 'arbitrum',
+      isWethVault: false,
+      canEnter: true,
+      canExit: true,
+      inputTokenDecimals: 6,
+      vaultTokenDecimals: 18,
+      // no allocatorVaults — wide margin only via context
+    },
+    {
+      address: KILN_PARENT_VAULT.toLowerCase(),
+      chainId: CHAIN_ID,
+      protocol: 'morpho',
+      yieldId: 'arbitrum-usdc-kiln-margin-vault',
+      inputTokenAddress: INPUT_TOKEN.toLowerCase(),
+      vaultTokenAddress: KILN_PARENT_VAULT.toLowerCase(),
+      network: 'arbitrum',
+      isWethVault: false,
+      canEnter: true,
+      canExit: true,
+      inputTokenDecimals: 6,
+      vaultTokenDecimals: 18,
+      allocatorVaults: [KILN_ALLOCATOR.toLowerCase()],
     },
   ],
   lastUpdated: Date.now(),
@@ -1061,7 +1098,7 @@ describe('ERC4626Validator', () => {
         );
         return buildTx({ to: VAULT_ADDRESS, data, value: '0x0' });
       };
-      // --- withdraw: exact match vs args.amount ---
+      // withdraw: within-margin match vs args.amount (margin "10")
       it('accepts withdraw exactly matching the declared amount', () => {
         const result = validator.validate(
           withdrawTx(WITHDRAW_WEI),
@@ -1070,26 +1107,6 @@ describe('ERC4626Validator', () => {
           { amount: DECLARED_ASSETS },
         );
         expect(result.isValid).toBe(true);
-      });
-      it('rejects withdraw one wei above the declared amount', () => {
-        const result = validator.validate(
-          withdrawTx(WITHDRAW_WEI + 1n),
-          TransactionType.WITHDRAW,
-          USER_ADDRESS,
-          { amount: DECLARED_ASSETS },
-        );
-        expect(result.isValid).toBe(false);
-        expect(result.reason).toContain('does not match declared intent');
-      });
-      it('rejects withdraw one wei below the declared amount', () => {
-        const result = validator.validate(
-          withdrawTx(WITHDRAW_WEI - 1n),
-          TransactionType.WITHDRAW,
-          USER_ADDRESS,
-          { amount: DECLARED_ASSETS },
-        );
-        expect(result.isValid).toBe(false);
-        expect(result.reason).toContain('does not match declared intent');
       });
       it('skips amount enforcement on withdraw when args.amount is absent (back-compat)', () => {
         const result = validator.validate(
@@ -1110,6 +1127,34 @@ describe('ERC4626Validator', () => {
         expect(result.reason).toContain(
           'Cannot verify withdraw (asset-denominated) against declared shareAmount',
         );
+      });
+      it('accepts withdraw within ASSET_WITHDRAW_EXIT_MARGIN above declared (Δ=10)', () => {
+        const result = validator.validate(
+          withdrawTx(WITHDRAW_WEI + 10n),
+          TransactionType.WITHDRAW,
+          USER_ADDRESS,
+          { amount: DECLARED_ASSETS },
+        );
+        expect(result.isValid).toBe(true);
+      });
+      it('accepts withdraw within margin below declared (Δ=5)', () => {
+        const result = validator.validate(
+          withdrawTx(WITHDRAW_WEI - 5n),
+          TransactionType.WITHDRAW,
+          USER_ADDRESS,
+          { amount: DECLARED_ASSETS },
+        );
+        expect(result.isValid).toBe(true);
+      });
+      it('rejects withdraw outside margin (Δ=11)', () => {
+        const result = validator.validate(
+          withdrawTx(WITHDRAW_WEI + 11n),
+          TransactionType.WITHDRAW,
+          USER_ADDRESS,
+          { amount: DECLARED_ASSETS },
+        );
+        expect(result.isValid).toBe(false);
+        expect(result.reason).toContain('does not match declared intent');
       });
       // --- redeem: within-margin match vs args.shareAmount ---
       // mockConfig vault has no decimals / no feeConfigurationId → margin "10"
@@ -1216,6 +1261,87 @@ describe('ERC4626Validator', () => {
         );
         expect(result.isValid).toBe(false);
         expect(result.reason).toContain('base-unit integer string');
+      });
+    });
+    describe('redeem margin — allocator / kiln / context', () => {
+      const SHARE_WEI = 1000n;
+      const DECLARED_SHARES = '1000';
+      const WIDE = 10n ** 13n;
+      const redeemTo = (to: string, shares: bigint) => {
+        const data = erc4626Iface.encodeFunctionData(
+          'redeem(uint256,address,address)',
+          [shares, USER_ADDRESS, USER_ADDRESS],
+        );
+        return buildTx({ to, data, value: '0x0' });
+      };
+      it('accepts redeem to ALLOCATOR within decimal-gap margin (Δ=10^13)', () => {
+        expect(
+          validator.validate(
+            redeemTo(ALLOCATOR_VAULT_ADDRESS, SHARE_WEI + WIDE),
+            TransactionType.WITHDRAW,
+            USER_ADDRESS,
+            { shareAmount: DECLARED_SHARES },
+          ).isValid,
+        ).toBe(true);
+      });
+      it('rejects redeem to ALLOCATOR outside decimal-gap margin', () => {
+        const result = validator.validate(
+          redeemTo(ALLOCATOR_VAULT_ADDRESS, SHARE_WEI + WIDE + 1n),
+          TransactionType.WITHDRAW,
+          USER_ADDRESS,
+          { shareAmount: DECLARED_SHARES },
+        );
+        expect(result.isValid).toBe(false);
+      });
+      it('keeps margin 10 on Morpho underlying (Δ=11 blocked, Δ=5 ok)', () => {
+        expect(
+          validator.validate(
+            redeemTo(MORPHO_VAULT_ADDRESS, SHARE_WEI + 5n),
+            TransactionType.WITHDRAW,
+            USER_ADDRESS,
+            { shareAmount: DECLARED_SHARES },
+          ).isValid,
+        ).toBe(true);
+        expect(
+          validator.validate(
+            redeemTo(MORPHO_VAULT_ADDRESS, SHARE_WEI + 11n),
+            TransactionType.WITHDRAW,
+            USER_ADDRESS,
+            { shareAmount: DECLARED_SHARES },
+          ).isValid,
+        ).toBe(false);
+      });
+      it('widens margin for context.feeConfiguration allocator only', () => {
+        const context = {
+          feeConfiguration: [{ allocatorVaultAddress: CONTEXT_ALLOCATOR }],
+        };
+        expect(
+          validator.validate(
+            redeemTo(CONTEXT_ALLOCATOR, SHARE_WEI + WIDE),
+            TransactionType.WITHDRAW,
+            USER_ADDRESS,
+            { shareAmount: DECLARED_SHARES },
+            context,
+          ).isValid,
+        ).toBe(true);
+      });
+      it('forces margin 10 for kiln-set allocator even with 6/18 parent', () => {
+        expect(
+          validator.validate(
+            redeemTo(KILN_ALLOCATOR, SHARE_WEI + 5n),
+            TransactionType.WITHDRAW,
+            USER_ADDRESS,
+            { shareAmount: DECLARED_SHARES },
+          ).isValid,
+        ).toBe(true);
+        expect(
+          validator.validate(
+            redeemTo(KILN_ALLOCATOR, SHARE_WEI + 11n),
+            TransactionType.WITHDRAW,
+            USER_ADDRESS,
+            { shareAmount: DECLARED_SHARES },
+          ).isValid,
+        ).toBe(false);
       });
     });
   });

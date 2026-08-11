@@ -13,7 +13,7 @@ export interface VaultInfo {
   canEnter?: boolean; // Whether deposits are enabled
   canExit?: boolean; // Whether withdrawals are enabled
   allocatorVaults?: string[]; // Allocator vault addresses (ERC4626-compatible)
-  /** Optional: used to get accepatable margin near max redeem shares on exit on when feeConfigurationId is set. */
+  /** Base vault token decimals — used for redeem margin when tx.to is an allocator (non-kiln). */
   inputTokenDecimals?: number;
   vaultTokenDecimals?: number;
 }

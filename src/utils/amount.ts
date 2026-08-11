@@ -1,5 +1,8 @@
 export const MAX_UINT256 = (1n << 256n) - 1n;
 
+/* withdraw(assets) near-max snap band. */
+export const ASSET_WITHDRAW_EXIT_MARGIN = '10';
+
 // Opt-in: undefined declared amount → skip (returns true).
 export function matchesDeclaredAmount(
   calldataAmount: bigint,
@@ -29,16 +32,17 @@ export function matchesDeclaredAmountWithinMargin(
 }
 
 /**
- * Replicates monorepo getRedeemMargin / getErc4626ExitMargin (without kiln address list).
- * Missing feeConfigurationId OR missing decimals → "10".
+ * Adjusted margin when useDecimalGapMargin is true
+ * (allocator / OAV target, excluding kiln-forced-fixed set). Otherwise "10".
+ * Missing decimals → "10".
  */
 export function getErc4626RedeemMargin(input: {
-  feeConfigurationId?: string;
+  useDecimalGapMargin: boolean;
   inputTokenDecimals?: number;
   vaultTokenDecimals?: number;
 }): string {
   if (
-    input.feeConfigurationId === undefined ||
+    !input.useDecimalGapMargin ||
     input.inputTokenDecimals === undefined ||
     input.vaultTokenDecimals === undefined
   ) {
