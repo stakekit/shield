@@ -110,7 +110,7 @@ export class ERC4626Validator extends BaseEVMValidator {
     transactionType: TransactionType,
     userAddress: string,
     args?: ActionArguments,
-    context?: ValidationContext,
+    _context?: ValidationContext,
   ): ValidationResult {
     const decoded = this.decodeEVMTransaction(unsignedTransaction);
     if (!decoded.isValid || !decoded.transaction) {
@@ -177,6 +177,20 @@ export class ERC4626Validator extends BaseEVMValidator {
       });
     }
 
+    if (
+      declaredShareAmount !== undefined &&
+      transactionType !== TransactionType.WITHDRAW &&
+      transactionType !== TransactionType.UNWRAP
+    ) {
+      return this.blocked(
+        'Declared shareAmount is only valid for ERC-4626 exit transactions',
+        {
+          transactionType,
+          declared: declaredShareAmount,
+        },
+      );
+    }
+
     // Route to appropriate validation based on transaction type
     switch (transactionType) {
       case TransactionType.APPROVAL:
@@ -199,7 +213,6 @@ export class ERC4626Validator extends BaseEVMValidator {
           receiverAddress,
           declaredAmount,
           declaredShareAmount,
-          context,
         );
       case TransactionType.UNWRAP:
         return this.validateUnwrap(tx, chainId);
@@ -444,7 +457,6 @@ export class ERC4626Validator extends BaseEVMValidator {
     receiverAddress?: string,
     declaredAmount?: string,
     declaredShareAmount?: string,
-    context?: ValidationContext,
   ): ValidationResult {
     const resolved = this.resolveVault(tx, chainId);
     if ('error' in resolved) return resolved.error;
@@ -523,7 +535,7 @@ export class ERC4626Validator extends BaseEVMValidator {
       if (declaredShareAmount !== undefined) {
         const margin = getErc4626RedeemMargin({
           useDecimalGapMargin:
-            this.isAllocatorTarget(tx.to!, vaultInfo, context) &&
+            this.isAllocatorTarget(tx.to!, vaultInfo) &&
             !isKilnFixedMarginVault(tx.to!),
           inputTokenDecimals: vaultInfo.inputTokenDecimals,
           vaultTokenDecimals: vaultInfo.vaultTokenDecimals,
@@ -663,16 +675,11 @@ export class ERC4626Validator extends BaseEVMValidator {
     return { vaultInfo };
   }
 
-  private isAllocatorTarget(
-    txTo: string,
-    vaultInfo: VaultInfo,
-    context?: ValidationContext,
-  ): boolean {
+  private isAllocatorTarget(txTo: string, vaultInfo: VaultInfo): boolean {
     const to = txTo.toLowerCase();
-    if (vaultInfo.allocatorVaults?.includes(to)) return true;
     return (
-      context?.feeConfiguration?.some(
-        (fc) => fc.allocatorVaultAddress?.toLowerCase() === to,
+      vaultInfo.allocatorVaults?.some(
+        (address) => address.toLowerCase() === to,
       ) === true
     );
   }
