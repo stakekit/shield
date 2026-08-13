@@ -9,7 +9,13 @@ import { BaseEVMValidator, EVMTransaction } from '../base.validator';
 import { VaultInfo, VaultConfiguration } from './types';
 import { WETH_ADDRESSES } from './constants';
 import { isNonEmptyString } from '../../../utils/validation';
-import { matchesDeclaredAmount } from '../../../utils/amount';
+import {
+  matchesDeclaredAmount,
+  matchesDeclaredAmountWithinMargin,
+  getErc4626RedeemMargin,
+  ASSET_WITHDRAW_EXIT_MARGIN,
+} from '../../../utils/amount';
+import { isKilnFixedMarginVault } from './kiln-fixed-margin-vaults';
 
 /**
  * Standard ERC4626 ABI - only the functions we need to validate
@@ -139,6 +145,10 @@ export class ERC4626Validator extends BaseEVMValidator {
       ? args.amount
       : undefined;
 
+    const declaredShareAmount = isNonEmptyString(args?.shareAmount)
+      ? args.shareAmount
+      : undefined;
+
     // Declared amount is a base-unit (wei) integer string — same unit as calldata.
     // Reject anything else explicitly (e.g. human-readable "0.01") rather than
     // letting BigInt() throw into a generic parse-error block.
@@ -146,6 +156,38 @@ export class ERC4626Validator extends BaseEVMValidator {
       return this.blocked(
         'Declared amount must be a base-unit integer string (wei)',
         { declared: declaredAmount },
+      );
+    }
+
+    if (
+      declaredShareAmount !== undefined &&
+      !/^[0-9]+$/.test(declaredShareAmount)
+    ) {
+      return this.blocked(
+        'Declared shareAmount must be a base-unit integer string (share wei)',
+        { declared: declaredShareAmount },
+      );
+    }
+
+    //cannot combine asset + share intents.
+    if (declaredAmount !== undefined && declaredShareAmount !== undefined) {
+      return this.blocked('Cannot declare both amount and shareAmount', {
+        amount: declaredAmount,
+        shareAmount: declaredShareAmount,
+      });
+    }
+
+    if (
+      declaredShareAmount !== undefined &&
+      transactionType !== TransactionType.WITHDRAW &&
+      transactionType !== TransactionType.UNWRAP
+    ) {
+      return this.blocked(
+        'Declared shareAmount is only valid for ERC-4626 exit transactions',
+        {
+          transactionType,
+          declared: declaredShareAmount,
+        },
       );
     }
 
@@ -164,7 +206,14 @@ export class ERC4626Validator extends BaseEVMValidator {
           declaredAmount,
         );
       case TransactionType.WITHDRAW:
-        return this.validateWithdraw(tx, userAddress, chainId, receiverAddress);
+        return this.validateWithdraw(
+          tx,
+          userAddress,
+          chainId,
+          receiverAddress,
+          declaredAmount,
+          declaredShareAmount,
+        );
       case TransactionType.UNWRAP:
         return this.validateUnwrap(tx, chainId);
       default:
@@ -406,6 +455,8 @@ export class ERC4626Validator extends BaseEVMValidator {
     userAddress: string,
     chainId: number,
     receiverAddress?: string,
+    declaredAmount?: string,
+    declaredShareAmount?: string,
   ): ValidationResult {
     const resolved = this.resolveVault(tx, chainId);
     if ('error' in resolved) return resolved.error;
@@ -449,6 +500,63 @@ export class ERC4626Validator extends BaseEVMValidator {
     const amountBigInt = BigInt(amount);
     if (amountBigInt === 0n) {
       return this.blocked('Withdraw amount is zero');
+    }
+
+    // --- amount intent (additive / opt-in) ---
+    if (parsed.name === 'withdraw') {
+      // share intent on asset calldata → fail-closed (no redeem↔withdraw bypass)
+      if (declaredShareAmount !== undefined) {
+        return this.blocked(
+          'Cannot verify withdraw (asset-denominated) against declared shareAmount',
+          { declared: declaredShareAmount },
+        );
+      }
+      if (
+        !matchesDeclaredAmountWithinMargin(
+          amountBigInt,
+          declaredAmount,
+          ASSET_WITHDRAW_EXIT_MARGIN,
+        )
+      ) {
+        return this.blocked('Withdraw amount does not match declared intent', {
+          expected: declaredAmount,
+          actual: amountBigInt.toString(),
+          margin: ASSET_WITHDRAW_EXIT_MARGIN,
+        });
+      }
+    } else {
+      // redeem
+      if (declaredAmount !== undefined) {
+        return this.blocked(
+          'Cannot verify redeem (share-denominated) against declared asset amount',
+          { declared: declaredAmount },
+        );
+      }
+      if (declaredShareAmount !== undefined) {
+        const margin = getErc4626RedeemMargin({
+          useDecimalGapMargin:
+            this.isAllocatorTarget(tx.to!, vaultInfo) &&
+            !isKilnFixedMarginVault(tx.to!),
+          inputTokenDecimals: vaultInfo.inputTokenDecimals,
+          vaultTokenDecimals: vaultInfo.vaultTokenDecimals,
+        });
+        if (
+          !matchesDeclaredAmountWithinMargin(
+            amountBigInt,
+            declaredShareAmount,
+            margin,
+          )
+        ) {
+          return this.blocked(
+            'Redeem share amount does not match declared intent',
+            {
+              expected: declaredShareAmount,
+              actual: amountBigInt.toString(),
+              margin,
+            },
+          );
+        }
+      }
     }
 
     // Validate owner is the user (they must own the shares)
@@ -565,6 +673,15 @@ export class ERC4626Validator extends BaseEVMValidator {
     }
 
     return { vaultInfo };
+  }
+
+  private isAllocatorTarget(txTo: string, vaultInfo: VaultInfo): boolean {
+    const to = txTo.toLowerCase();
+    return (
+      vaultInfo.allocatorVaults?.some(
+        (address) => address.toLowerCase() === to,
+      ) === true
+    );
   }
 
   /**

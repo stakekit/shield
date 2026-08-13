@@ -1,4 +1,9 @@
-import { MAX_UINT256, matchesDeclaredAmount } from './amount';
+import {
+  MAX_UINT256,
+  matchesDeclaredAmount,
+  matchesDeclaredAmountWithinMargin,
+  getErc4626RedeemMargin,
+} from './amount';
 
 describe('MAX_UINT256', () => {
   it('equals 2^256 - 1', () => {
@@ -46,5 +51,82 @@ describe('matchesDeclaredAmount', () => {
   it('throws on a non-integer declared string (defense-in-depth: unreachable via schema pattern + validator guard, which reject non-digit amounts first)', () => {
     expect(() => matchesDeclaredAmount(1000000n, '1.5')).toThrow();
     expect(() => matchesDeclaredAmount(1000000n, 'abc')).toThrow();
+  });
+});
+
+describe('matchesDeclaredAmountWithinMargin', () => {
+  const DECLARED = '1000';
+  const MARGIN = '10';
+
+  it('returns true on exact match', () => {
+    expect(matchesDeclaredAmountWithinMargin(1000n, DECLARED, MARGIN)).toBe(
+      true,
+    );
+  });
+
+  it('returns true when calldata is within margin above declared (snap-up)', () => {
+    expect(matchesDeclaredAmountWithinMargin(1005n, DECLARED, MARGIN)).toBe(
+      true,
+    );
+  });
+
+  it('returns true when calldata is within margin below declared (snap-down)', () => {
+    expect(matchesDeclaredAmountWithinMargin(995n, DECLARED, MARGIN)).toBe(
+      true,
+    );
+  });
+
+  it('returns false when outside margin', () => {
+    expect(matchesDeclaredAmountWithinMargin(1011n, DECLARED, MARGIN)).toBe(
+      false,
+    );
+  });
+
+  it('returns true when declared is undefined (opt-in skip)', () => {
+    expect(matchesDeclaredAmountWithinMargin(999999n, undefined, MARGIN)).toBe(
+      true,
+    );
+  });
+
+  it('throws on non-integer declared string', () => {
+    expect(() =>
+      matchesDeclaredAmountWithinMargin(1000n, '1.5', MARGIN),
+    ).toThrow();
+  });
+});
+
+describe('getErc4626RedeemMargin', () => {
+  it('returns 10 when useDecimalGapMargin is false', () => {
+    expect(
+      getErc4626RedeemMargin({
+        useDecimalGapMargin: false,
+        inputTokenDecimals: 6,
+        vaultTokenDecimals: 18,
+      }),
+    ).toBe('10');
+  });
+
+  it('returns 10 when decimals are missing even with useDecimalGapMargin', () => {
+    expect(getErc4626RedeemMargin({ useDecimalGapMargin: true })).toBe('10');
+  });
+
+  it('returns 10^(abs(diff)+1) when gap margin + decimals (6 vs 18 → 10^13)', () => {
+    expect(
+      getErc4626RedeemMargin({
+        useDecimalGapMargin: true,
+        inputTokenDecimals: 6,
+        vaultTokenDecimals: 18,
+      }),
+    ).toBe((10n ** 13n).toString());
+  });
+
+  it('returns 10 for equal decimals with gap margin (diff 0 → 10^1)', () => {
+    expect(
+      getErc4626RedeemMargin({
+        useDecimalGapMargin: true,
+        inputTokenDecimals: 18,
+        vaultTokenDecimals: 18,
+      }),
+    ).toBe('10');
   });
 });

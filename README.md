@@ -191,6 +191,60 @@ Shield validates the following operations for all supported ERC4626 vaults:
 | WETH Wrap   | WRAP             | Convert native ETH to WETH (WETH vaults only) |
 | WETH Unwrap | UNWRAP           | Convert WETH to native ETH (WETH vaults only) |
 
+
+### Amount intent (`args`) — ERC-4626 enter & exit
+
+Amount checks are **opt-in**. If you omit `args.amount` / `args.shareAmount`, Shield runs only structural checks (vault whitelist, owner/receiver, method, non-zero).
+
+**Units:** pass **base-unit integer strings (wei)** only — the same scale as calldata. Human values like `"0.01"` are rejected.
+
+| Calldata | Pass to Shield | Match rule |
+| -------- | -------------- | ---------- |
+| `deposit` / `approve` / `WRAP` | `args.amount` (asset wei) | Exact |
+| `withdraw(assets, …)` | `args.amount` (asset wei) | Within **10** wei (monorepo near-max snap) |
+| `redeem(shares, …)` | `args.shareAmount` (share wei) | Within margin (see below) |
+
+Do **not** declare both `amount` and `shareAmount`. Do **not** pass asset `amount` on a `redeem`, or `shareAmount` on a `withdraw` (fail-closed).
+
+**Match the built tx, not only what you sent the Yield API:**
+
+| Yield API exit | Typical calldata | Shield args |
+| -------------- | ---------------- | ----------- |
+| `amount` with withdraw-on-amount (team flag off) | `withdraw(assets)` | `amount` = asset wei |
+| `shareAmount` / `shareAmountRaw` | `redeem(shares)` | `shareAmount` = share wei |
+| `useMaxAmount: true` | `redeem(maxRedeem)` | `shareAmount` from balances `shareAmountRaw`, or omit intent |
+
+```typescript
+// Partial exit — withdraw(assets)
+shield.validate({
+  unsignedTransaction,
+  yieldId,
+  userAddress,
+  args: { amount: '1000000' }, // 1 USDC @ 6 decimals, wei
+});
+
+// Share exit — redeem(shares)
+shield.validate({
+  unsignedTransaction,
+  yieldId,
+  userAddress,
+  args: { shareAmount: '1000000000000000000' }, // 1 share @ 18 decimals
+});
+
+// Full exit (useMaxAmount) — redeem; declare the share balance, not an asset amount
+shield.validate({
+  unsignedTransaction,
+  yieldId,
+  userAddress,
+  args: { shareAmount: balance.shareAmountRaw },
+});
+```
+
+**Redeem margin**
+
+- Default / underlying vault: **`"10"`** share wei.
+- Allocator / OAV target (`tx.to` in the registry's `allocatorVaults`): decimal-gap margin `10^(abs(inputDecimals − vaultDecimals) + 1)` — e.g. USDC 6 vs shares 18 → `10^13` — except a small hardcoded set of OAVs that stay at `"10"` for parity with the Yield API exit path.
+
 ## API Reference
 
 ### `shield.validate(request)`
@@ -248,7 +302,7 @@ Shield is designed with security as a top priority:
 
 ### Embedded Vault Registry
 
-ERC4626 vault data is embedded in the package at build time from `vault-registry.json`. The registry includes allocator vault (OAV) addresses for yields with fee configurations. Transactions targeting allocator vaults are validated using the same ERC4626 standard.
+ERC-4626 vault data is embedded at build time from `vault-registry.json` (addresses, token decimals, and `allocatorVaults`). Transactions to known allocator vaults use the same ERC-4626 checks. Newly deployed OAVs are only recognized after a registry re-export and package publish.
 
 ### Verifying Binary Integrity
 
