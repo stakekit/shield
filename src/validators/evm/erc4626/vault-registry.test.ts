@@ -57,6 +57,24 @@ describe('vault-registry.json integrity', () => {
     const sorted = [...yieldIds].sort((a, b) => a.localeCompare(b));
     expect(yieldIds).toEqual(sorted);
   });
+
+  it('should have valid decimals when present', () => {
+    let withDecimals = 0;
+    for (const vault of registry.vaults as any[]) {
+      const hasInput = vault.inputTokenDecimals !== undefined;
+      const hasVault = vault.vaultTokenDecimals !== undefined;
+      expect(hasInput).toBe(hasVault);
+      if (!hasInput) continue;
+      withDecimals += 1;
+      expect(Number.isInteger(vault.inputTokenDecimals)).toBe(true);
+      expect(Number.isInteger(vault.vaultTokenDecimals)).toBe(true);
+      expect(vault.inputTokenDecimals).toBeGreaterThanOrEqual(0);
+      expect(vault.inputTokenDecimals).toBeLessThanOrEqual(255);
+      expect(vault.vaultTokenDecimals).toBeGreaterThanOrEqual(0);
+      expect(vault.vaultTokenDecimals).toBeLessThanOrEqual(255);
+    }
+    expect(withDecimals).toBe(registry.vaults.length);
+  });
 });
 
 describe('loadEmbeddedRegistry()', () => {
