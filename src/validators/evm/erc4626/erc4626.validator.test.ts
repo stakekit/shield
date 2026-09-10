@@ -397,12 +397,12 @@ describe('ERC4626Validator', () => {
       expect(result.reason).toContain('not to WETH contract');
     });
 
-    it('should reject zero ETH value', () => {
+    it('should accept zero ETH value wrap with ZERO_AMOUNT flag', () => {
       const data = wethIface.encodeFunctionData('deposit', []);
       const tx = buildTx({ to: WETH_ARBITRUM, data, value: '0x0' });
       const result = validator.validate(tx, TransactionType.WRAP, USER_ADDRESS);
-      expect(result.isValid).toBe(false);
-      expect(result.reason).toContain('must send ETH value');
+      expect(result.isValid).toBe(true);
+      expect(result.details?.flags).toContain('ZERO_AMOUNT');
     });
 
     it('should reject non-deposit function selector', () => {
@@ -481,6 +481,28 @@ describe('ERC4626Validator', () => {
           USER_ADDRESS,
         );
         expect(result.isValid).toBe(true);
+      });
+      it('accepts wrap value 0 matching declared amount 0 with ZERO_AMOUNT flag', () => {
+        const result = validator.validate(
+          wrapTx(0n),
+          TransactionType.WRAP,
+          USER_ADDRESS,
+          { amount: '0' },
+        );
+        expect(result.isValid).toBe(true);
+        expect(result.details?.flags).toContain('ZERO_AMOUNT');
+      });
+      it('rejects wrap value 0 when declared amount is non-zero', () => {
+        const result = validator.validate(
+          wrapTx(0n),
+          TransactionType.WRAP,
+          USER_ADDRESS,
+          { amount: ONE_ETH.toString() },
+        );
+        expect(result.isValid).toBe(false);
+        expect(result.reason).toContain(
+          'WRAP amount does not match declared intent',
+        );
       });
     });
   });
@@ -673,7 +695,7 @@ describe('ERC4626Validator', () => {
       expect(result.reason).toContain('should not send ETH');
     });
 
-    it('should reject zero-amount deposit', () => {
+    it('should accept zero-amount deposit with ZERO_AMOUNT flag', () => {
       const data = erc4626Iface.encodeFunctionData('deposit', [
         0,
         USER_ADDRESS,
@@ -684,8 +706,38 @@ describe('ERC4626Validator', () => {
         TransactionType.SUPPLY,
         USER_ADDRESS,
       );
+      expect(result.isValid).toBe(true);
+      expect(result.details?.flags).toContain('ZERO_AMOUNT');
+    });
+
+    it('should still block zero-amount supply to a non-whitelisted vault', () => {
+      const data = erc4626Iface.encodeFunctionData('deposit', [
+        0,
+        USER_ADDRESS,
+      ]);
+      const tx = buildTx({ to: MALICIOUS_ADDRESS, data, value: '0x0' });
+      const result = validator.validate(
+        tx,
+        TransactionType.SUPPLY,
+        USER_ADDRESS,
+      );
       expect(result.isValid).toBe(false);
-      expect(result.reason).toContain('zero');
+      expect(result.reason).toContain('not whitelisted');
+    });
+
+    it('should still block zero-amount supply when receiver != expected', () => {
+      const data = erc4626Iface.encodeFunctionData('deposit', [
+        0,
+        OTHER_ADDRESS,
+      ]);
+      const tx = buildTx({ to: VAULT_ADDRESS, data, value: '0x0' });
+      const result = validator.validate(
+        tx,
+        TransactionType.SUPPLY,
+        USER_ADDRESS,
+      );
+      expect(result.isValid).toBe(false);
+      expect(result.reason).toContain('does not match expected address');
     });
     describe('amount intent validation', () => {
       const depositTx = (assets: bigint) => {
@@ -884,7 +936,7 @@ describe('ERC4626Validator', () => {
         expect(result.isValid).toBe(false);
         expect(result.reason).toContain('tampered');
       });
-      it('should reject zero-amount 3-arg deposit', () => {
+      it('should accept zero-amount 3-arg deposit with ZERO_AMOUNT flag', () => {
         const data = erc4626ReferralIface.encodeFunctionData('deposit', [
           0,
           USER_ADDRESS,
@@ -896,8 +948,8 @@ describe('ERC4626Validator', () => {
           TransactionType.SUPPLY,
           USER_ADDRESS,
         );
-        expect(result.isValid).toBe(false);
-        expect(result.reason).toContain('zero');
+        expect(result.isValid).toBe(true);
+        expect(result.details?.flags).toContain('ZERO_AMOUNT');
       });
       it('should reject 3-arg deposit to non-whitelisted vault', () => {
         const data = erc4626ReferralIface.encodeFunctionData('deposit', [
@@ -1045,7 +1097,7 @@ describe('ERC4626Validator', () => {
       expect(result.isValid).toBe(false);
     });
 
-    it('should reject zero-amount withdraw', () => {
+    it('should accept zero-amount withdraw with ZERO_AMOUNT flag', () => {
       const data = erc4626Iface.encodeFunctionData(
         'withdraw(uint256,address,address)',
         [0, USER_ADDRESS, USER_ADDRESS],
@@ -1056,8 +1108,23 @@ describe('ERC4626Validator', () => {
         TransactionType.WITHDRAW,
         USER_ADDRESS,
       );
+      expect(result.isValid).toBe(true);
+      expect(result.details?.flags).toContain('ZERO_AMOUNT');
+    });
+
+    it('should still block zero-amount withdraw when owner != user', () => {
+      const data = erc4626Iface.encodeFunctionData(
+        'withdraw(uint256,address,address)',
+        [0, USER_ADDRESS, OTHER_ADDRESS],
+      );
+      const tx = buildTx({ to: VAULT_ADDRESS, data, value: '0x0' });
+      const result = validator.validate(
+        tx,
+        TransactionType.WITHDRAW,
+        USER_ADDRESS,
+      );
       expect(result.isValid).toBe(false);
-      expect(result.reason).toContain('zero');
+      expect(result.reason).toContain('Owner address does not match');
     });
 
     describe('amount intent validation', () => {
@@ -1555,7 +1622,7 @@ describe('ERC4626Validator', () => {
       expect(result.isValid).toBe(true);
     });
 
-    it('should reject zero amount', () => {
+    it('should accept zero amount with ZERO_AMOUNT flag', () => {
       const data = wethIface.encodeFunctionData('withdraw', [0]);
       const tx = buildTx({ to: WETH_ARBITRUM, data, value: '0x0' });
       const result = validator.validate(
@@ -1563,8 +1630,8 @@ describe('ERC4626Validator', () => {
         TransactionType.UNWRAP,
         USER_ADDRESS,
       );
-      expect(result.isValid).toBe(false);
-      expect(result.reason).toContain('UNWRAP amount is zero');
+      expect(result.isValid).toBe(true);
+      expect(result.details?.flags).toContain('ZERO_AMOUNT');
     });
 
     it('should reject wrong WETH address', () => {

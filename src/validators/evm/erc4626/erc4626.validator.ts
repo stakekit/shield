@@ -325,11 +325,8 @@ export class ERC4626Validator extends BaseEVMValidator {
       });
     }
 
-    // WRAP must send ETH value
     const value = BigInt(tx.value ?? '0');
-    if (value === 0n) {
-      return this.blocked('WRAP transaction must send ETH value');
-    }
+
     // Amount intent validation: the wrapped amount is tx.value (native wei),
     // same unit as the declared amount for WETH-vault enters — exact-match.
     if (!matchesDeclaredAmount(value, declaredAmount)) {
@@ -356,7 +353,7 @@ export class ERC4626Validator extends BaseEVMValidator {
       });
     }
 
-    return this.safe();
+    return this.safe(value === 0n ? ['ZERO_AMOUNT'] : undefined);
   }
 
   /**
@@ -409,9 +406,6 @@ export class ERC4626Validator extends BaseEVMValidator {
     // Both deposit and mint have receiver as second parameter
     const [amount, receiver] = parsed.args;
     const amountBigInt = BigInt(amount);
-    if (amountBigInt === 0n) {
-      return this.blocked('Supply amount is zero');
-    }
 
     // Amount intent validation: deposit's first arg is assets (underlying, wei) —
     // same unit as the declared amount, so exact-match. mint is share-denominated
@@ -444,7 +438,7 @@ export class ERC4626Validator extends BaseEVMValidator {
       });
     }
 
-    return this.safe();
+    return this.safe(amountBigInt === 0n ? ['ZERO_AMOUNT'] : undefined);
   }
 
   /**
@@ -498,9 +492,6 @@ export class ERC4626Validator extends BaseEVMValidator {
     // Both withdraw and redeem have: (amount, receiver, owner)
     const [amount, receiver, owner] = parsed.args;
     const amountBigInt = BigInt(amount);
-    if (amountBigInt === 0n) {
-      return this.blocked('Withdraw amount is zero');
-    }
 
     // --- amount intent (additive / opt-in) ---
     if (parsed.name === 'withdraw') {
@@ -576,7 +567,7 @@ export class ERC4626Validator extends BaseEVMValidator {
       });
     }
 
-    return this.safe();
+    return this.safe(amountBigInt === 0n ? ['ZERO_AMOUNT'] : undefined);
   }
 
   /**
@@ -634,14 +625,10 @@ export class ERC4626Validator extends BaseEVMValidator {
       });
     }
 
-    // Validate amount is not zero
     const [amount] = parsed.args;
     const amountBigInt = BigInt(amount);
-    if (amountBigInt === 0n) {
-      return this.blocked('UNWRAP amount is zero');
-    }
 
-    return this.safe();
+    return this.safe(amountBigInt === 0n ? ['ZERO_AMOUNT'] : undefined);
   }
 
   private resolveVault(
