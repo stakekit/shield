@@ -325,8 +325,16 @@ export class ERC4626Validator extends BaseEVMValidator {
       });
     }
 
-    // WRAP must send ETH value
     const value = BigInt(tx.value ?? '0');
+
+    // Amount intent validation: the wrapped amount is tx.value (native wei),
+    // same unit as the declared amount for WETH-vault enters — exact-match.
+    if (!matchesDeclaredAmount(value, declaredAmount)) {
+      return this.blocked('WRAP amount does not match declared intent', {
+        expected: declaredAmount,
+        actual: value.toString(),
+      });
+    }
 
     // Parse the wrap calldata
     const result = this.parseAndValidateCalldata(
@@ -399,6 +407,27 @@ export class ERC4626Validator extends BaseEVMValidator {
     const [amount, receiver] = parsed.args;
     const amountBigInt = BigInt(amount);
 
+    // Amount intent validation: deposit's first arg is assets (underlying, wei) —
+    // same unit as the declared amount, so exact-match. mint is share-denominated
+    // and cannot be verified against an asset-denominated intent offline, so when
+    // an intent amount is declared, mint is rejected (fail-closed) rather than
+    // skipped — otherwise rewriting deposit → mint would bypass the amount check.
+    if (parsed.name === 'mint' && declaredAmount !== undefined) {
+      return this.blocked(
+        'Cannot verify mint (share-denominated) against declared asset amount',
+        { declared: declaredAmount },
+      );
+    }
+    if (
+      parsed.name === 'deposit' &&
+      !matchesDeclaredAmount(amountBigInt, declaredAmount)
+    ) {
+      return this.blocked('Supply amount does not match declared intent', {
+        expected: declaredAmount,
+        actual: amountBigInt.toString(),
+      });
+    }
+
     // Validate receiver is the intended receiver
     const expectedReceiver = receiverAddress ?? userAddress;
 
@@ -463,6 +492,63 @@ export class ERC4626Validator extends BaseEVMValidator {
     // Both withdraw and redeem have: (amount, receiver, owner)
     const [amount, receiver, owner] = parsed.args;
     const amountBigInt = BigInt(amount);
+
+    // --- amount intent (additive / opt-in) ---
+    if (parsed.name === 'withdraw') {
+      // share intent on asset calldata → fail-closed (no redeem↔withdraw bypass)
+      if (declaredShareAmount !== undefined) {
+        return this.blocked(
+          'Cannot verify withdraw (asset-denominated) against declared shareAmount',
+          { declared: declaredShareAmount },
+        );
+      }
+      if (
+        !matchesDeclaredAmountWithinMargin(
+          amountBigInt,
+          declaredAmount,
+          ASSET_WITHDRAW_EXIT_MARGIN,
+        )
+      ) {
+        return this.blocked('Withdraw amount does not match declared intent', {
+          expected: declaredAmount,
+          actual: amountBigInt.toString(),
+          margin: ASSET_WITHDRAW_EXIT_MARGIN,
+        });
+      }
+    } else {
+      // redeem
+      if (declaredAmount !== undefined) {
+        return this.blocked(
+          'Cannot verify redeem (share-denominated) against declared asset amount',
+          { declared: declaredAmount },
+        );
+      }
+      if (declaredShareAmount !== undefined) {
+        const margin = getErc4626RedeemMargin({
+          useDecimalGapMargin:
+            this.isAllocatorTarget(tx.to!, vaultInfo) &&
+            !isKilnFixedMarginVault(tx.to!),
+          inputTokenDecimals: vaultInfo.inputTokenDecimals,
+          vaultTokenDecimals: vaultInfo.vaultTokenDecimals,
+        });
+        if (
+          !matchesDeclaredAmountWithinMargin(
+            amountBigInt,
+            declaredShareAmount,
+            margin,
+          )
+        ) {
+          return this.blocked(
+            'Redeem share amount does not match declared intent',
+            {
+              expected: declaredShareAmount,
+              actual: amountBigInt.toString(),
+              margin,
+            },
+          );
+        }
+      }
+    }
 
     // Validate owner is the user (they must own the shares)
     if (owner.toLowerCase() !== userAddress.toLowerCase()) {
