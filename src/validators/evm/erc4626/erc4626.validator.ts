@@ -265,7 +265,10 @@ export class ERC4626Validator extends BaseEVMValidator {
     // Validate spender is a whitelisted vault (static registry, then injected OAV)
     const spenderAddress = spender.toLowerCase();
     let vaultInfo = this.vaultInfoMap.get(`${chainId}:${spenderAddress}`);
-    if (!vaultInfo && this.getInjectedAllocatorVaults(context).has(spenderAddress)) {
+    if (
+      !vaultInfo &&
+      this.getInjectedAllocatorVaults(context).has(spenderAddress)
+    ) {
       vaultInfo = this.getBaseVaultForChain(chainId);
     }
     if (!vaultInfo) {
@@ -672,7 +675,10 @@ export class ERC4626Validator extends BaseEVMValidator {
       }
     }
     return {
-      error: this.blocked('Vault address not whitelisted', { vaultAddress, chainId }),
+      error: this.blocked('Vault address not whitelisted', {
+        vaultAddress,
+        chainId,
+      }),
     };
   }
 
