@@ -2066,4 +2066,214 @@ describe('ERC4626Validator', () => {
       expect(result.isValid).toBe(true);
     });
   });
+  describe('context-injected allocator vaults (runtime OAV)', () => {
+    const INJECTED_ALLOCATOR_VAULT_ADDRESS =
+      '0x0bb69b79bc829e1cfcc34a740110886d98d2bd14';
+    const baseVault = {
+      address: VAULT_ADDRESS.toLowerCase(),
+      chainId: CHAIN_ID,
+      protocol: 'morpho',
+      yieldId: 'arbitrum-usdc-runtime-oav-base-vault',
+      inputTokenAddress: INPUT_TOKEN.toLowerCase(),
+      vaultTokenAddress: VAULT_ADDRESS.toLowerCase(),
+      network: 'arbitrum',
+      isWethVault: false,
+      canEnter: true,
+      canExit: true,
+      inputTokenDecimals: 6,
+      vaultTokenDecimals: 18,
+    };
+    const runtimeValidator = new ERC4626Validator({
+      vaults: [baseVault],
+      lastUpdated: Date.now(),
+    });
+    const staticAllocatorValidator = new ERC4626Validator({
+      vaults: [
+        {
+          ...baseVault,
+          allocatorVaults: [ALLOCATOR_VAULT_ADDRESS],
+        },
+      ],
+      lastUpdated: Date.now(),
+    });
+    const runtimeContext = {
+      feeConfiguration: [
+        {
+          allocatorVaultAddress: INJECTED_ALLOCATOR_VAULT_ADDRESS,
+        },
+      ],
+    };
+    it('should validate SUPPLY deposit to a context-injected allocator vault', () => {
+      const data = erc4626Iface.encodeFunctionData('deposit', [
+        ethers.parseUnits('1000', 6),
+        USER_ADDRESS,
+      ]);
+      const tx = buildTx({
+        to: INJECTED_ALLOCATOR_VAULT_ADDRESS,
+        data,
+        value: '0x0',
+      });
+      const result = runtimeValidator.validate(
+        tx,
+        TransactionType.SUPPLY,
+        USER_ADDRESS,
+        undefined,
+        runtimeContext,
+      );
+      expect(result.isValid).toBe(true);
+    });
+    it('should validate SUPPLY mint to a context-injected allocator vault', () => {
+      const data = erc4626Iface.encodeFunctionData('mint', [
+        ethers.parseUnits('500', 18),
+        USER_ADDRESS,
+      ]);
+      const tx = buildTx({
+        to: INJECTED_ALLOCATOR_VAULT_ADDRESS,
+        data,
+        value: '0x0',
+      });
+      const result = runtimeValidator.validate(
+        tx,
+        TransactionType.SUPPLY,
+        USER_ADDRESS,
+        undefined,
+        runtimeContext,
+      );
+      expect(result.isValid).toBe(true);
+    });
+    it('should validate WITHDRAW withdraw from a context-injected allocator vault', () => {
+      const data = erc4626Iface.encodeFunctionData(
+        'withdraw(uint256,address,address)',
+        [ethers.parseUnits('1000', 6), USER_ADDRESS, USER_ADDRESS],
+      );
+      const tx = buildTx({
+        to: INJECTED_ALLOCATOR_VAULT_ADDRESS,
+        data,
+        value: '0x0',
+      });
+      const result = runtimeValidator.validate(
+        tx,
+        TransactionType.WITHDRAW,
+        USER_ADDRESS,
+        undefined,
+        runtimeContext,
+      );
+      expect(result.isValid).toBe(true);
+    });
+    it('should validate WITHDRAW redeem from a context-injected allocator vault', () => {
+      const data = erc4626Iface.encodeFunctionData(
+        'redeem(uint256,address,address)',
+        [ethers.parseUnits('500', 18), USER_ADDRESS, USER_ADDRESS],
+      );
+      const tx = buildTx({
+        to: INJECTED_ALLOCATOR_VAULT_ADDRESS,
+        data,
+        value: '0x0',
+      });
+      const result = runtimeValidator.validate(
+        tx,
+        TransactionType.WITHDRAW,
+        USER_ADDRESS,
+        undefined,
+        runtimeContext,
+      );
+      expect(result.isValid).toBe(true);
+    });
+    it('should validate APPROVAL of the base input token to a context-injected allocator vault', () => {
+      const data = erc20Iface.encodeFunctionData('approve', [
+        INJECTED_ALLOCATOR_VAULT_ADDRESS,
+        ethers.parseUnits('1000', 6),
+      ]);
+      const tx = buildTx({
+        to: INPUT_TOKEN,
+        data,
+        value: '0x0',
+      });
+      const result = runtimeValidator.validate(
+        tx,
+        TransactionType.APPROVAL,
+        USER_ADDRESS,
+        undefined,
+        runtimeContext,
+      );
+      expect(result.isValid).toBe(true);
+    });
+    it('should reject APPROVAL of the wrong token to a context-injected allocator vault', () => {
+      const data = erc20Iface.encodeFunctionData('approve', [
+        INJECTED_ALLOCATOR_VAULT_ADDRESS,
+        ethers.parseUnits('1000', 6),
+      ]);
+      const tx = buildTx({
+        to: OTHER_ADDRESS,
+        data,
+        value: '0x0',
+      });
+      const result = runtimeValidator.validate(
+        tx,
+        TransactionType.APPROVAL,
+        USER_ADDRESS,
+        undefined,
+        runtimeContext,
+      );
+      expect(result.isValid).toBe(false);
+      expect(result.reason).toContain(
+        'Approval token does not match vault input token',
+      );
+    });
+    it('should reject the injected allocator SUPPLY when context is omitted', () => {
+      const data = erc4626Iface.encodeFunctionData('deposit', [
+        ethers.parseUnits('1000', 6),
+        USER_ADDRESS,
+      ]);
+      const tx = buildTx({
+        to: INJECTED_ALLOCATOR_VAULT_ADDRESS,
+        data,
+        value: '0x0',
+      });
+      const result = runtimeValidator.validate(
+        tx,
+        TransactionType.SUPPLY,
+        USER_ADDRESS,
+      );
+      expect(result.isValid).toBe(false);
+      expect(result.reason).toContain('not whitelisted');
+    });
+    it('should reject a non-injected address when context is present', () => {
+      const data = erc4626Iface.encodeFunctionData('deposit', [
+        ethers.parseUnits('1000', 6),
+        USER_ADDRESS,
+      ]);
+      const tx = buildTx({
+        to: MALICIOUS_ADDRESS,
+        data,
+        value: '0x0',
+      });
+      const result = runtimeValidator.validate(
+        tx,
+        TransactionType.SUPPLY,
+        USER_ADDRESS,
+        undefined,
+        runtimeContext,
+      );
+      expect(result.isValid).toBe(false);
+      expect(result.reason).toContain('not whitelisted');
+    });
+    it('should continue validating a static allocator vault without context', () => {
+      const data = erc4626Iface.encodeFunctionData('deposit', [
+        ethers.parseUnits('1000', 6),
+        USER_ADDRESS,
+      ]);
+      const tx = buildTx({
+        to: ALLOCATOR_VAULT_ADDRESS,
+        data,
+        value: '0x0',
+      });
+      const result = staticAllocatorValidator.validate(
+        tx,
+        TransactionType.SUPPLY,
+        USER_ADDRESS,
+      );
+      expect(result.isValid).toBe(true);
+    });
+  });
 });
