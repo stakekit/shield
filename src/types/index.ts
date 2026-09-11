@@ -44,6 +44,8 @@ export interface FeeConfiguration {
   depositFeeBps?: number;
   feeRecipientAddress?: string;
   allocatorVaultAddress?: string;
+  /** Input token of the injected OAV. Required for injected-OAV APPROVAL. */
+  allocatorVaultInputTokenAddress?: string;
 }
 
 export interface ValidationContext {
