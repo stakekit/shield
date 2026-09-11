@@ -265,12 +265,18 @@ export class ERC4626Validator extends BaseEVMValidator {
     // Validate spender is a whitelisted vault (static registry, then injected OAV)
     const spenderAddress = spender.toLowerCase();
     let vaultInfo = this.vaultInfoMap.get(`${chainId}:${spenderAddress}`);
-    if (
-      !vaultInfo &&
-      this.getInjectedAllocatorVaults(context).has(spenderAddress)
-    ) {
-      vaultInfo = this.getBaseVaultForChain(chainId);
+    if (!vaultInfo) {
+      const injected = this.getInjectedAllocatorVaults(context);
+      const injectedInputToken = injected.get(spenderAddress);
+      if (injectedInputToken) {
+        vaultInfo = this.synthesizeInjectedVault(
+          spenderAddress,
+          chainId,
+          injectedInputToken,
+        );
+      }
     }
+
     if (!vaultInfo) {
       return this.blocked('Approval spender is not a whitelisted vault', {
         spender,
@@ -665,14 +671,14 @@ export class ERC4626Validator extends BaseEVMValidator {
     }
     const staticVault = this.vaultInfoMap.get(`${chainId}:${vaultAddress}`);
     if (staticVault) return { vaultInfo: staticVault };
-    // Runtime, DB-sourced OAV: accept if injected via context
-    if (this.getInjectedAllocatorVaults(context).has(vaultAddress)) {
-      const base = this.getBaseVaultForChain(chainId);
-      if (base) {
-        return {
-          vaultInfo: { ...base, address: vaultAddress },
-        };
-      }
+    const injected = this.getInjectedAllocatorVaults(context);
+    if (injected.has(vaultAddress)) {
+      const synthesized = this.synthesizeInjectedVault(
+        vaultAddress,
+        chainId,
+        injected.get(vaultAddress),
+      );
+      if (synthesized) return { vaultInfo: synthesized };
     }
     return {
       error: this.blocked('Vault address not whitelisted', {
@@ -699,22 +705,38 @@ export class ERC4626Validator extends BaseEVMValidator {
     return WETH_ADDRESSES[chainId] || null;
   }
 
-  private getInjectedAllocatorVaults(context?: ValidationContext): Set<string> {
-    const injected = new Set<string>();
+  private getInjectedAllocatorVaults(
+    context?: ValidationContext,
+  ): Map<string, string | undefined> {
+    const injected = new Map<string, string | undefined>();
     for (const fee of context?.feeConfiguration ?? []) {
-      if (isNonEmptyString(fee.allocatorVaultAddress)) {
-        injected.add(fee.allocatorVaultAddress.toLowerCase());
-      }
+      if (!isNonEmptyString(fee.allocatorVaultAddress)) continue;
+      const address = fee.allocatorVaultAddress.toLowerCase();
+      const inputToken = isNonEmptyString(fee.allocatorVaultInputTokenAddress)
+        ? fee.allocatorVaultInputTokenAddress.toLowerCase()
+        : undefined;
+      injected.set(address, inputToken);
     }
     return injected;
   }
-
-  // The instance is yield-scoped to one base vault; use it as the template
-  // for a context-injected OAV (input token + protocol metadata).
-  private getBaseVaultForChain(chainId: number): VaultInfo | undefined {
+  private synthesizeInjectedVault(
+    vaultAddress: string,
+    chainId: number,
+    injectedInputToken?: string,
+  ): VaultInfo | undefined {
+    let base: VaultInfo | undefined;
     for (const vault of this.vaultInfoMap.values()) {
-      if (vault.chainId === chainId) return vault;
+      if (vault.chainId === chainId) {
+        base = vault;
+        break;
+      }
     }
-    return undefined;
+    if (!base) return undefined;
+    return {
+      ...base,
+      address: vaultAddress,
+      inputTokenAddress: injectedInputToken ?? base.inputTokenAddress,
+      allocatorVaults: [vaultAddress],
+    };
   }
 }
