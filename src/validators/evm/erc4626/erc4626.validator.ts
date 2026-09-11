@@ -277,7 +277,6 @@ export class ERC4626Validator extends BaseEVMValidator {
       }
     }
 
-    
     if (!vaultInfo) {
       return this.blocked('Approval spender is not a whitelisted vault', {
         spender,
