@@ -74,6 +74,10 @@ export const requestSchema = {
               depositFeeBps: { type: 'number', minimum: 0, maximum: 10000 },
               feeRecipientAddress: { type: 'string', maxLength: 128 },
               allocatorVaultAddress: { type: 'string', maxLength: 128 },
+              allocatorVaultInputTokenAddress: {
+                type: 'string',
+                maxLength: 128,
+              },
             },
           },
         },
