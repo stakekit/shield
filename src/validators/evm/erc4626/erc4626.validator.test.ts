@@ -2103,6 +2103,27 @@ describe('ERC4626Validator', () => {
         },
       ],
     };
+
+    const runtimeContextWithInputToken = {
+      feeConfiguration: [
+        {
+          allocatorVaultAddress: INJECTED_ALLOCATOR_VAULT_ADDRESS,
+          allocatorVaultInputTokenAddress: INPUT_TOKEN,
+        },
+      ],
+    };
+
+    const META_OAV_INPUT_TOKEN = '0x82af49447d8a07e3bd95bd0d56f35241523fbab1';
+
+    const runtimeContextWithMetaInputToken = {
+      feeConfiguration: [
+        {
+          allocatorVaultAddress: INJECTED_ALLOCATOR_VAULT_ADDRESS,
+          allocatorVaultInputTokenAddress: META_OAV_INPUT_TOKEN,
+        },
+      ],
+    };
+
     it('should validate SUPPLY deposit to a context-injected allocator vault', () => {
       const data = erc4626Iface.encodeFunctionData('deposit', [
         ethers.parseUnits('1000', 6),
@@ -2194,7 +2215,7 @@ describe('ERC4626Validator', () => {
         TransactionType.APPROVAL,
         USER_ADDRESS,
         undefined,
-        runtimeContext,
+        runtimeContextWithInputToken,
       );
       expect(result.isValid).toBe(true);
     });
@@ -2213,12 +2234,75 @@ describe('ERC4626Validator', () => {
         TransactionType.APPROVAL,
         USER_ADDRESS,
         undefined,
-        runtimeContext,
+        runtimeContextWithInputToken,
       );
       expect(result.isValid).toBe(false);
       expect(result.reason).toContain(
         'Approval token does not match vault input token',
       );
+    });
+    it('should reject APPROVAL of an injected OAV when allocatorVaultInputTokenAddress is omitted', () => {
+      const data = erc20Iface.encodeFunctionData('approve', [
+        INJECTED_ALLOCATOR_VAULT_ADDRESS,
+        ethers.parseUnits('1000', 6),
+      ]);
+      const tx = buildTx({
+        to: INPUT_TOKEN,
+        data,
+        value: '0x0',
+      });
+      const result = runtimeValidator.validate(
+        tx,
+        TransactionType.APPROVAL,
+        USER_ADDRESS,
+        undefined,
+        runtimeContext,
+      );
+      expect(result.isValid).toBe(false);
+      expect(result.reason).toContain(
+        'Approval spender is not a whitelisted vault',
+      );
+    });
+    it('should reject APPROVAL when injected OAV input token does not match the token', () => {
+      const data = erc20Iface.encodeFunctionData('approve', [
+        INJECTED_ALLOCATOR_VAULT_ADDRESS,
+        ethers.parseUnits('1000', 6),
+      ]);
+      const tx = buildTx({
+        to: INPUT_TOKEN,
+        data,
+        value: '0x0',
+      });
+      const result = runtimeValidator.validate(
+        tx,
+        TransactionType.APPROVAL,
+        USER_ADDRESS,
+        undefined,
+        runtimeContextWithMetaInputToken,
+      );
+      expect(result.isValid).toBe(false);
+      expect(result.reason).toContain(
+        'Approval token does not match vault input token',
+      );
+    });
+    it('should validate APPROVAL when injected OAV input token differs from the base vault token', () => {
+      const data = erc20Iface.encodeFunctionData('approve', [
+        INJECTED_ALLOCATOR_VAULT_ADDRESS,
+        ethers.parseUnits('1000', 18),
+      ]);
+      const tx = buildTx({
+        to: META_OAV_INPUT_TOKEN,
+        data,
+        value: '0x0',
+      });
+      const result = runtimeValidator.validate(
+        tx,
+        TransactionType.APPROVAL,
+        USER_ADDRESS,
+        undefined,
+        runtimeContextWithMetaInputToken,
+      );
+      expect(result.isValid).toBe(true);
     });
     it('should reject the injected allocator SUPPLY when context is omitted', () => {
       const data = erc4626Iface.encodeFunctionData('deposit', [
