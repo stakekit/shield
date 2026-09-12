@@ -435,7 +435,8 @@ describe('handleJsonRequest', () => {
         validRequest({
           feeConfiguration: [
             {
-              allocatorVaultAddress: '0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb8',
+              allocatorVaultAddress:
+                '0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb8',
               allocatorVaultInputTokenAddress:
                 '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48',
             },
