@@ -259,7 +259,7 @@ Validates a transaction by auto-detecting its type.
   yieldId: string;              // Yield integration ID
   userAddress: string;          // User's wallet address
   args?: ActionArguments;       // Optional arguments
-  context?: ValidationContext;  // Optional context
+  context?: ValidationContext;  // Trusted control-plane data (see Runtime OAV injection)
 }
 ```
 
@@ -302,7 +302,37 @@ Shield is designed with security as a top priority:
 
 ### Embedded Vault Registry
 
-ERC-4626 vault data is embedded at build time from `vault-registry.json` (addresses, token decimals, and `allocatorVaults`). Transactions to known allocator vaults use the same ERC-4626 checks. Newly deployed OAVs are only recognized after a registry re-export and package publish.
+ERC-4626 vault data is embedded at build time from the **installed package’s** `vault-registry.json` (addresses, token decimals, and `allocatorVaults`). Transactions to known allocator vaults use the same ERC-4626 checks.
+Treat that snapshot as a baseline for third-party vaults, not as the decision gate for “is this project OAV already allowed?” The copy on GitHub `main` can lag the package you actually run, and both can lag newly deployed OAVs. Always pass your project’s OAVs in `context` (additive; see below). A registry re-export + publish is convenience for the static snapshot, not a prerequisite for validating a live OAV.
+
+### Runtime OAV injection (`context`)
+
+  For OAV-enabled ERC-4626 yields, pass project OAVs on every `validate` call. Injection is **additive**: it can unblock a legitimate OAV that is missing from the baked snapshot; it does not remove static-registry vaults.
+
+  ```typescript
+  shield.validate({
+    unsignedTransaction,
+    yieldId,
+    userAddress,
+    args, // optional
+    context: {
+      feeConfiguration: [
+        {
+          allocatorVaultAddress: '0x…', // OAV / allocator vault
+          // Required for injected-OAV APPROVAL. Omit only if you are not
+          // validating approvals against this OAV (supply/withdraw still pass).
+          allocatorVaultInputTokenAddress: '0x…', // that OAV's underlying token
+        },
+      ],
+    },
+  });
+  ```
+  
+  `allocatorVaultInputTokenAddress` is required for **injected-OAV APPROVAL**. Shield checks the approval token against this address. If it is omitted or does not match, APPROVAL is blocked. Supply and withdraw still succeed if you pass only `allocatorVaultAddress`. The token may differ from the yield’s base vault (e.g. a meta-vault).
+
+  **Trust boundary:** `context` is trusted control-plane data. Populate it server-side from the project’s own authenticated fee-configuration / OAV records. Never take it from the end user or from `unsignedTransaction`. User-supplied addresses in `context` expand the vault/spender whitelist and defeat Shield.
+
+  Shield stays offline; fetching OAVs is the caller’s job. Injection only widens that whitelist — `from` / owner / receiver, method, calldata, and amount checks still apply.
 
 ### Verifying Binary Integrity
 

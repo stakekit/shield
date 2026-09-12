@@ -6,19 +6,18 @@ describe('handleJsonRequest', () => {
     const input = typeof req === 'string' ? req : JSON.stringify(req);
     return JSON.parse(handleJsonRequest(input));
   };
+  const userAddress = '0x742d35cc6634c0532925a3b844bc9e7595f0beb8';
+  const referralAddress = '0x371240E80Bf84eC2bA8b55aE2fD0B467b16Db2be';
+  const validLidoStakeTx = {
+    to: '0xae7ab96520DE3A18E5e111B5EaAb095312D7fE84',
+    from: userAddress,
+    value: '0xde0b6b3a7640000',
+    data: '0xa1903eab' + referralAddress.slice(2).padStart(64, '0'),
+    chainId: 1,
+  };
 
   describe('validate operation', () => {
     // Use the same test data as shield.test.ts
-    const userAddress = '0x742d35cc6634c0532925a3b844bc9e7595f0beb8';
-    const referralAddress = '0x371240E80Bf84eC2bA8b55aE2fD0B467b16Db2be';
-
-    const validLidoStakeTx = {
-      to: '0xae7ab96520DE3A18E5e111B5EaAb095312D7fE84', // Lido stETH
-      from: userAddress,
-      value: '0xde0b6b3a7640000', // 1 ETH
-      data: '0xa1903eab' + referralAddress.slice(2).padStart(64, '0'), // submit(referral)
-      chainId: 1,
-    };
 
     const validLidoUnstakeTx = {
       to: '0x889edC2eDab5f40e902b864aD4d7AdE8E412F9B1', // Lido withdrawal queue
@@ -232,17 +231,6 @@ describe('handleJsonRequest', () => {
   });
 
   describe('optional parameters: args and context', () => {
-    const userAddress = '0x742d35cc6634c0532925a3b844bc9e7595f0beb8';
-    const referralAddress = '0x371240E80Bf84eC2bA8b55aE2fD0B467b16Db2be';
-
-    const validLidoStakeTx = {
-      to: '0xae7ab96520DE3A18E5e111B5EaAb095312D7fE84',
-      from: userAddress,
-      value: '0xde0b6b3a7640000',
-      data: '0xa1903eab' + referralAddress.slice(2).padStart(64, '0'),
-      chainId: 1,
-    };
-
     it('should forward args parameter to Shield validator', () => {
       const response = call({
         apiVersion: '1.0',
@@ -306,15 +294,6 @@ describe('handleJsonRequest', () => {
   });
 
   describe('schema: args.amount and args.decimals boundaries', () => {
-    const userAddress = '0x742d35cc6634c0532925a3b844bc9e7595f0beb8';
-    const referralAddress = '0x371240E80Bf84eC2bA8b55aE2fD0B467b16Db2be';
-    const validLidoStakeTx = {
-      to: '0xae7ab96520DE3A18E5e111B5EaAb095312D7fE84',
-      from: userAddress,
-      value: '0xde0b6b3a7640000',
-      data: '0xa1903eab' + referralAddress.slice(2).padStart(64, '0'),
-      chainId: 1,
-    };
     // 78 decimal digits — the schema's maxLength for args.amount
     const MAX_UINT256_STRING = (2n ** 256n - 1n).toString();
     const validRequest = (args: object) => ({
@@ -384,15 +363,6 @@ describe('handleJsonRequest', () => {
   });
 
   describe('schema: args.shareAmount boundaries', () => {
-    const userAddress = '0x742d35cc6634c0532925a3b844bc9e7595f0beb8';
-    const referralAddress = '0x371240E80Bf84eC2bA8b55aE2fD0B467b16Db2be';
-    const validLidoStakeTx = {
-      to: '0xae7ab96520DE3A18E5e111B5EaAb095312D7fE84',
-      from: userAddress,
-      value: '0xde0b6b3a7640000',
-      data: '0xa1903eab' + referralAddress.slice(2).padStart(64, '0'),
-      chainId: 1,
-    };
     const MAX_UINT256_STRING = (2n ** 256n - 1n).toString();
     const validRequest = (args: object) => ({
       apiVersion: '1.0',
@@ -433,6 +403,79 @@ describe('handleJsonRequest', () => {
       );
       expect(response.ok).toBe(true);
       expect(response.result.isValid).toBe(true); // Lido path; no ERC-4626 both-declared check
+    });
+  });
+
+  describe('schema: context.feeConfiguration address fields', () => {
+    const VALID_HEX = '0x1234567890123456789012345678901234567890';
+    const validRequest = (context: object) => ({
+      apiVersion: '1.0',
+      operation: 'validate',
+      yieldId: 'ethereum-eth-lido-staking',
+      unsignedTransaction: JSON.stringify(validLidoStakeTx),
+      userAddress,
+      context,
+    });
+    it('accepts valid hex allocatorVaultAddress and allocatorVaultInputTokenAddress', () => {
+      const response = call(
+        validRequest({
+          feeConfiguration: [
+            {
+              allocatorVaultAddress: VALID_HEX,
+              allocatorVaultInputTokenAddress: VALID_HEX,
+            },
+          ],
+        }),
+      );
+      expect(response.ok).toBe(true);
+      expect(response.result.isValid).toBe(true);
+    });
+    it('accepts mixed-case checksum hex', () => {
+      const response = call(
+        validRequest({
+          feeConfiguration: [
+            {
+              allocatorVaultAddress: '0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb8',
+              allocatorVaultInputTokenAddress:
+                '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48',
+            },
+          ],
+        }),
+      );
+      expect(response.ok).toBe(true);
+      expect(response.error).toBeUndefined();
+    });
+    it('accepts allocatorVaultAddress without allocatorVaultInputTokenAddress (schema-optional)', () => {
+      const response = call(
+        validRequest({
+          feeConfiguration: [{ allocatorVaultAddress: VALID_HEX }],
+        }),
+      );
+      expect(response.ok).toBe(true);
+      expect(response.result.isValid).toBe(true);
+    });
+    it('rejects allocatorVaultAddress "not-an-address" with SCHEMA_VALIDATION_ERROR', () => {
+      const response = call(
+        validRequest({
+          feeConfiguration: [{ allocatorVaultAddress: 'not-an-address' }],
+        }),
+      );
+      expect(response.ok).toBe(false);
+      expect(response.error.code).toBe('SCHEMA_VALIDATION_ERROR');
+    });
+    it('rejects allocatorVaultInputTokenAddress "not-an-address" with SCHEMA_VALIDATION_ERROR', () => {
+      const response = call(
+        validRequest({
+          feeConfiguration: [
+            {
+              allocatorVaultAddress: VALID_HEX,
+              allocatorVaultInputTokenAddress: 'not-an-address',
+            },
+          ],
+        }),
+      );
+      expect(response.ok).toBe(false);
+      expect(response.error.code).toBe('SCHEMA_VALIDATION_ERROR');
     });
   });
 
@@ -528,17 +571,6 @@ describe('handleJsonRequest', () => {
   });
 
   describe('security: tampering detection', () => {
-    const userAddress = '0x742d35cc6634c0532925a3b844bc9e7595f0beb8';
-    const referralAddress = '0x371240E80Bf84eC2bA8b55aE2fD0B467b16Db2be';
-
-    const validLidoStakeTx = {
-      to: '0xae7ab96520DE3A18E5e111B5EaAb095312D7fE84',
-      from: userAddress,
-      value: '0xde0b6b3a7640000',
-      data: '0xa1903eab' + referralAddress.slice(2).padStart(64, '0'),
-      chainId: 1,
-    };
-
     it('should reject transaction with appended data', () => {
       const tamperedTx = {
         ...validLidoStakeTx,
