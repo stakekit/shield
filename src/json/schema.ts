@@ -73,10 +73,15 @@ export const requestSchema = {
             properties: {
               depositFeeBps: { type: 'number', minimum: 0, maximum: 10000 },
               feeRecipientAddress: { type: 'string', maxLength: 128 },
-              allocatorVaultAddress: { type: 'string', maxLength: 128 },
+              allocatorVaultAddress: {
+                type: 'string',
+                maxLength: 128,
+                pattern: '^0x[0-9a-fA-F]{40}$',
+              },
               allocatorVaultInputTokenAddress: {
                 type: 'string',
                 maxLength: 128,
+                pattern: '^0x[0-9a-fA-F]{40}$',
               },
             },
           },
