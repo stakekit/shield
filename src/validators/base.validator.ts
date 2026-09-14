@@ -6,8 +6,10 @@ import {
 } from '../types';
 
 export abstract class BaseValidator {
-  protected safe(): ValidationResult {
-    return { isValid: true };
+  protected safe(flags?: string[]): ValidationResult {
+    return flags && flags.length > 0
+      ? { isValid: true, details: { flags } }
+      : { isValid: true };
   }
 
   protected blocked(

@@ -6,6 +6,7 @@ export interface ValidationResult {
     matchedTypes?: TransactionType[];
     supportedTypes?: TransactionType[];
     warning?: string;
+    flags?: string[]; // non-blocking signals, e.g. 'ZERO_AMOUNT'
     attempts?: {
       type?: TransactionType;
       reason?: string;
