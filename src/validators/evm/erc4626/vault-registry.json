@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generatedAt": "2026-08-08T05:07:04.643Z",
+  "generatedAt": "2026-09-10T22:01:48.570Z",
   "vaults": [
     {
       "yieldId": "arbitrum-arb-earb-1-0x7ed866d2d66c3149fafe854c30c68a8ba7cee8b9-4626-vault",
@@ -1506,6 +1506,18 @@
       "network": "arbitrum",
       "inputTokenAddress": "0xff970a61a04b1ca14834a43f5de4533ebddb5cc8",
       "vaultTokenAddress": "0xe82d060687c014b280b65df24acd94a77251c784",
+      "isWethVault": false,
+      "inputTokenDecimals": 6,
+      "vaultTokenDecimals": 6
+    },
+    {
+      "yieldId": "arc-testnet-usdc-musdc-0x8f2d33b5d4b9b5f02df635ae308f7b4c9da8d2dc-4626-vault",
+      "address": "0x8f2d33b5d4b9b5f02df635ae308f7b4c9da8d2dc",
+      "chainId": 5042002,
+      "protocol": "morpho",
+      "network": "arc-testnet",
+      "inputTokenAddress": "0x3600000000000000000000000000000000000000",
+      "vaultTokenAddress": "0x8f2d33b5d4b9b5f02df635ae308f7b4c9da8d2dc",
       "isWethVault": false,
       "inputTokenDecimals": 6,
       "vaultTokenDecimals": 6
@@ -3666,7 +3678,9 @@
         "0xe1d3edd70824449102e2636093d5fe48980a96fc",
         "0xea6acb881ee1ff0ea972f87ae112f923f579928f",
         "0x3090da9ca38f8412bc7d3542406af866f9ebe962",
-        "0x9baea149f51b0023e4de6897d50998aa7144f408"
+        "0x8135fccf37c160c42c0bf5e4ca5d5c8730bb6b07",
+        "0x9baea149f51b0023e4de6897d50998aa7144f408",
+        "0x552073d6b43edf382e76898a68b5e71cbd6480d9"
       ]
     },
     {
@@ -6698,7 +6712,10 @@
       "vaultTokenAddress": "0xcf9ceacf5c7d6d2fe6e8650d81fbe4240c72443f",
       "isWethVault": false,
       "inputTokenDecimals": 18,
-      "vaultTokenDecimals": 18
+      "vaultTokenDecimals": 18,
+      "allocatorVaults": [
+        "0x0261e1d195ccae0d3de8ec001a1bf00b5feee990"
+      ]
     },
     {
       "yieldId": "ethereum-frxusd-efrxusd-1-0x20622fcd4476fbc9d5ef36ebd371307a56d9028c-4626-vault",
@@ -9665,7 +9682,10 @@
       "vaultTokenAddress": "0x5dc53a23adc9f2bed98de6f59f7f309a7c71ff2b",
       "isWethVault": false,
       "inputTokenDecimals": 6,
-      "vaultTokenDecimals": 18
+      "vaultTokenDecimals": 18,
+      "allocatorVaults": [
+        "0x5e34bbf38aa7f1b86c378da3ffecfca9ce73cbd2"
+      ]
     },
     {
       "yieldId": "ethereum-usdc-armusdcs-0xa2eaad0d586cf9fd73bb2c09cf6a7e3e187d68cd-4626-vault",
@@ -9677,7 +9697,10 @@
       "vaultTokenAddress": "0xa2eaad0d586cf9fd73bb2c09cf6a7e3e187d68cd",
       "isWethVault": false,
       "inputTokenDecimals": 6,
-      "vaultTokenDecimals": 18
+      "vaultTokenDecimals": 18,
+      "allocatorVaults": [
+        "0xce09b85bd1ee3a3f49d65d5dbe1fdccf0f4a9550"
+      ]
     },
     {
       "yieldId": "ethereum-usdc-augustusdc-0x711a68a82dd80cb0435b281af76b0b80804efab9-4626-vault",
@@ -12100,7 +12123,10 @@
       "vaultTokenAddress": "0x0e609b710da5e0aa476224b6c0e5445ccc21251e",
       "isWethVault": false,
       "inputTokenDecimals": 6,
-      "vaultTokenDecimals": 6
+      "vaultTokenDecimals": 6,
+      "allocatorVaults": [
+        "0xcc8228562d08c07207096fe70fa778e483334c53"
+      ]
     },
     {
       "yieldId": "ethereum-usdt-dusdtv3-0x05a811275fe9b4de503b3311f51edf6a856d936e-4626-vault",
