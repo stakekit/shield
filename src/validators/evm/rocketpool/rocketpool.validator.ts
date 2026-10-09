@@ -24,6 +24,8 @@ const LIFI_CONTRACTS = new Set([
 
 const LIFI_DIAMOND = '0x1231deb6f5749ef6ce6943a275a1d3e7486f4eae';
 
+const SLIPPAGE_FLOOR_BPS = 8000n; // 80% — rETH/ETH has never traded below 0.90
+
 const LIFI_SWAP_ABI = [
   'function swapTokensSingleV3ERC20ToERC20(bytes32 _transactionId, string _integrator, string _referrer, address _receiver, uint256 _minAmountOut, (address callTo, address approveTo, address sendingAssetId, address receivingAssetId, uint256 fromAmount, bytes callData, bool requiresDeposit) _swapData)',
   'function swapTokensSingleV3ERC20ToNative(bytes32 _transactionId, string _integrator, string _referrer, address _receiver, uint256 _minAmountOut, (address callTo, address approveTo, address sendingAssetId, address receivingAssetId, uint256 fromAmount, bytes callData, bool requiresDeposit) _swapData)',
@@ -146,6 +148,20 @@ export class RocketPoolValidator extends BaseEVMValidator {
         minTokensOut: BigInt(minTokensOut).toString(),
         idealTokensOut: BigInt(idealTokensOut).toString(),
       });
+    }
+
+    // Slippage floor: minTokensOut must be >= 80% of tx.value (ETH sent)
+    // rETH/ETH trades near 1:1; catches gross manipulation (e.g. minTokensOut = 1 wei on 1 ETH)
+    const slippageFloor = (value * SLIPPAGE_FLOOR_BPS) / 10000n;
+    if (BigInt(minTokensOut) < slippageFloor) {
+      return this.blocked(
+        'minTokensOut is too low relative to ETH value (slippage floor)',
+        {
+          minTokensOut: BigInt(minTokensOut).toString(),
+          txValue: value.toString(),
+          slippageFloor: slippageFloor.toString(),
+        },
+      );
     }
 
     return this.safe();
@@ -274,6 +290,37 @@ export class RocketPoolValidator extends BaseEVMValidator {
         receiver,
         userAddress,
       });
+    }
+
+    // _minAmountOut > 0
+    const minAmountOut = BigInt(parsed.args[4]);
+    if (minAmountOut <= 0n) {
+      return this.blocked('Minimum amount out must be greater than zero');
+    }
+    // Extract fromAmount from _swapData to compute slippage floor
+    // Single variants: args[5] is a tuple; Multiple variants: args[5] is tuple[]
+    let totalFromAmount: bigint;
+    if (parsed.name.includes('Multiple')) {
+      const swapDataArray = parsed.args[5] as unknown[];
+      totalFromAmount = swapDataArray.reduce<bigint>(
+        (sum, sd: any) => sum + BigInt(sd[4]),
+        0n,
+      );
+    } else {
+      totalFromAmount = BigInt(parsed.args[5][4]);
+    }
+    if (totalFromAmount > 0n) {
+      const slippageFloor = (totalFromAmount * SLIPPAGE_FLOOR_BPS) / 10000n;
+      if (minAmountOut < slippageFloor) {
+        return this.blocked(
+          '_minAmountOut is too low relative to fromAmount (slippage floor)',
+          {
+            minAmountOut: minAmountOut.toString(),
+            fromAmount: totalFromAmount.toString(),
+            slippageFloor: slippageFloor.toString(),
+          },
+        );
+      }
     }
 
     return this.safe();

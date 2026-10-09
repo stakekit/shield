@@ -35,6 +35,8 @@ describe('RocketPoolValidator via Shield', () => {
   const lifiSwapIface = new ethers.Interface([
     'function swapTokensSingleV3ERC20ToERC20(bytes32 _transactionId, string _integrator, string _referrer, address _receiver, uint256 _minAmountOut, (address callTo, address approveTo, address sendingAssetId, address receivingAssetId, uint256 fromAmount, bytes callData, bool requiresDeposit) _swapData)',
     'function swapTokensSingleV3ERC20ToNative(bytes32 _transactionId, string _integrator, string _referrer, address _receiver, uint256 _minAmountOut, (address callTo, address approveTo, address sendingAssetId, address receivingAssetId, uint256 fromAmount, bytes callData, bool requiresDeposit) _swapData)',
+    'function swapTokensMultipleV3ERC20ToERC20(bytes32 _transactionId, string _integrator, string _referrer, address _receiver, uint256 _minAmountOut, (address callTo, address approveTo, address sendingAssetId, address receivingAssetId, uint256 fromAmount, bytes callData, bool requiresDeposit)[] _swapData)',
+    'function swapTokensMultipleV3ERC20ToNative(bytes32 _transactionId, string _integrator, string _referrer, address _receiver, uint256 _minAmountOut, (address callTo, address approveTo, address sendingAssetId, address receivingAssetId, uint256 fromAmount, bytes callData, bool requiresDeposit)[] _swapData)',
   ]);
 
   const permit2ProxyIface = new ethers.Interface([
@@ -494,6 +496,96 @@ describe('RocketPoolValidator via Shield', () => {
         'Minimum tokens out exceeds ideal tokens out',
       );
     });
+
+    it('should reject stake with manipulated minTokensOut (far below slippage floor)', () => {
+      const manipulatedCalldata = iface.encodeFunctionData('swapTo', [
+        5000n,
+        5000n,
+        1n, // 1 wei — manipulated
+        950000000000000000n,
+      ]);
+      const tx = {
+        to: rocketSwapRouterAddress,
+        from: userAddress,
+        value: '0xde0b6b3a7640000', // 1 ETH
+        data: manipulatedCalldata,
+        nonce: 0,
+        gasLimit: '0x30d40',
+        gasPrice: '0x4a817c800',
+        chainId: 1,
+        type: 0,
+      };
+      const result = shield.validate({
+        yieldId,
+        unsignedTransaction: JSON.stringify(tx),
+        userAddress,
+      });
+      expect(result.isValid).toBe(false);
+      const stakeAttempt = result.details?.attempts?.find(
+        (a: any) => a.type === TransactionType.STAKE,
+      );
+      expect(stakeAttempt?.reason).toContain('slippage floor');
+    });
+
+    it('should accept stake with minTokensOut at exactly 80% of tx.value', () => {
+      const oneEthWei = 1000000000000000000n;
+      const eightyPercent = (oneEthWei * 8000n) / 10000n; // 0.8 ETH
+      const borderlineCalldata = iface.encodeFunctionData('swapTo', [
+        5000n,
+        5000n,
+        eightyPercent,
+        oneEthWei,
+      ]);
+      const tx = {
+        to: rocketSwapRouterAddress,
+        from: userAddress,
+        value: '0xde0b6b3a7640000', // 1 ETH
+        data: borderlineCalldata,
+        nonce: 0,
+        gasLimit: '0x30d40',
+        gasPrice: '0x4a817c800',
+        chainId: 1,
+        type: 0,
+      };
+      const result = shield.validate({
+        yieldId,
+        unsignedTransaction: JSON.stringify(tx),
+        userAddress,
+      });
+      expect(result.isValid).toBe(true);
+    });
+
+    it('should reject stake with minTokensOut just below 80% floor', () => {
+      const oneEthWei = 1000000000000000000n;
+      const justBelow = (oneEthWei * 8000n) / 10000n - 1n; // 0.8 ETH - 1 wei
+      const belowFloorCalldata = iface.encodeFunctionData('swapTo', [
+        5000n,
+        5000n,
+        justBelow,
+        oneEthWei,
+      ]);
+      const tx = {
+        to: rocketSwapRouterAddress,
+        from: userAddress,
+        value: '0xde0b6b3a7640000', // 1 ETH
+        data: belowFloorCalldata,
+        nonce: 0,
+        gasLimit: '0x30d40',
+        gasPrice: '0x4a817c800',
+        chainId: 1,
+        type: 0,
+      };
+      const result = shield.validate({
+        yieldId,
+        unsignedTransaction: JSON.stringify(tx),
+        userAddress,
+      });
+      expect(result.isValid).toBe(false);
+      const stakeAttempt = result.details?.attempts?.find(
+        (a: any) => a.type === TransactionType.STAKE,
+      );
+      expect(stakeAttempt?.reason).toContain('slippage floor');
+    });
   });
 
   describe('APPROVAL transactions', () => {
@@ -875,6 +967,70 @@ describe('RocketPoolValidator via Shield', () => {
       expect(result.detectedType).toBe(TransactionType.SWAP);
     });
 
+    it('should validate a direct Diamond swapTokensMultipleV3ERC20ToNative with matching receiver', () => {
+      const multipleSwapCalldata = lifiSwapIface.encodeFunctionData(
+        'swapTokensMultipleV3ERC20ToNative',
+        [
+          ethers.zeroPadValue('0x01', 32),
+          'stakekit',
+          '',
+          userAddress,
+          900000000000000000n,
+          [sampleSwapDataTuple],
+        ],
+      );
+      const tx = {
+        to: LIFI_DIAMOND,
+        from: userAddress,
+        value: '0x0',
+        data: multipleSwapCalldata,
+        nonce: 0,
+        gasLimit: '0x30d40',
+        gasPrice: '0x4a817c800',
+        chainId: 1,
+        type: 0,
+      };
+      const result = shield.validate({
+        yieldId,
+        unsignedTransaction: JSON.stringify(tx),
+        userAddress,
+      });
+      expect(result.isValid).toBe(true);
+      expect(result.detectedType).toBe(TransactionType.SWAP);
+    });
+
+    it('should validate a direct Diamond swapTokensMultipleV3ERC20ToERC20 with matching receiver', () => {
+      const multipleErc20Calldata = lifiSwapIface.encodeFunctionData(
+        'swapTokensMultipleV3ERC20ToERC20',
+        [
+          ethers.zeroPadValue('0x01', 32),
+          'stakekit',
+          '',
+          userAddress,
+          900000000000000000n,
+          [sampleSwapDataTuple],
+        ],
+      );
+      const tx = {
+        to: LIFI_DIAMOND,
+        from: userAddress,
+        value: '0x0',
+        data: multipleErc20Calldata,
+        nonce: 0,
+        gasLimit: '0x30d40',
+        gasPrice: '0x4a817c800',
+        chainId: 1,
+        type: 0,
+      };
+      const result = shield.validate({
+        yieldId,
+        unsignedTransaction: JSON.stringify(tx),
+        userAddress,
+      });
+      expect(result.isValid).toBe(true);
+      expect(result.detectedType).toBe(TransactionType.SWAP);
+    });
+
     it('should validate Permit2 Proxy callDiamondWithPermit2 wrapping valid swap', () => {
       const tx = {
         to: LIFI_PERMIT2_PROXY,
@@ -940,6 +1096,85 @@ describe('RocketPoolValidator via Shield', () => {
         userAddress,
       });
 
+      expect(result.isValid).toBe(true);
+      expect(result.detectedType).toBe(TransactionType.SWAP);
+    });
+
+    it('should validate Permit2-wrapped Multiple variant swap', () => {
+      const multipleSwapCalldata = lifiSwapIface.encodeFunctionData(
+        'swapTokensMultipleV3ERC20ToNative',
+        [
+          ethers.zeroPadValue('0x01', 32),
+          'stakekit',
+          '',
+          userAddress,
+          900000000000000000n,
+          [sampleSwapDataTuple],
+        ],
+      );
+      const permit2WrappedMultiple =
+        permit2ProxyIface.encodeFunctionData('callDiamondWithPermit2', [
+          multipleSwapCalldata,
+          dummyPermit,
+          dummySignature,
+        ]);
+      const tx = {
+        to: LIFI_PERMIT2_PROXY,
+        from: userAddress,
+        value: '0x0',
+        data: permit2WrappedMultiple,
+        nonce: 0,
+        gasLimit: '0x30d40',
+        gasPrice: '0x4a817c800',
+        chainId: 1,
+        type: 0,
+      };
+      const result = shield.validate({
+        yieldId,
+        unsignedTransaction: JSON.stringify(tx),
+        userAddress,
+      });
+      expect(result.isValid).toBe(true);
+      expect(result.detectedType).toBe(TransactionType.SWAP);
+    });
+
+    it('should validate Multiple swap with multiple swapData entries', () => {
+      const halfAmountSwapData = [
+        '0x0000000000000000000000000000000000000001',
+        '0x0000000000000000000000000000000000000001',
+        rETHAddress,
+        '0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2',
+        500000000000000000n,
+        '0x',
+        false,
+      ];
+      const multiEntryCalldata = lifiSwapIface.encodeFunctionData(
+        'swapTokensMultipleV3ERC20ToNative',
+        [
+          ethers.zeroPadValue('0x01', 32),
+          'stakekit',
+          '',
+          userAddress,
+          900000000000000000n,
+          [halfAmountSwapData, halfAmountSwapData],
+        ],
+      );
+      const tx = {
+        to: LIFI_DIAMOND,
+        from: userAddress,
+        value: '0x0',
+        data: multiEntryCalldata,
+        nonce: 0,
+        gasLimit: '0x30d40',
+        gasPrice: '0x4a817c800',
+        chainId: 1,
+        type: 0,
+      };
+      const result = shield.validate({
+        yieldId,
+        unsignedTransaction: JSON.stringify(tx),
+        userAddress,
+      });
       expect(result.isValid).toBe(true);
       expect(result.detectedType).toBe(TransactionType.SWAP);
     });
@@ -1050,6 +1285,44 @@ describe('RocketPoolValidator via Shield', () => {
         userAddress,
       });
 
+      expect(result.isValid).toBe(false);
+      expect(result.reason).toContain('No matching operation pattern found');
+      const swapAttempt = result.details?.attempts?.find(
+        (a: any) => a.type === TransactionType.SWAP,
+      );
+      expect(swapAttempt?.reason).toContain(
+        'SWAP receiver does not match user address',
+      );
+    });
+  
+    it('should reject Multiple variant swap with wrong receiver', () => {
+      const wrongReceiverMultiple = lifiSwapIface.encodeFunctionData(
+        'swapTokensMultipleV3ERC20ToNative',
+        [
+          ethers.zeroPadValue('0x01', 32),
+          'stakekit',
+          '',
+          '0x0000000000000000000000000000000000000bad',
+          900000000000000000n,
+          [sampleSwapDataTuple],
+        ],
+      );
+      const tx = {
+        to: LIFI_DIAMOND,
+        from: userAddress,
+        value: '0x0',
+        data: wrongReceiverMultiple,
+        nonce: 0,
+        gasLimit: '0x30d40',
+        gasPrice: '0x4a817c800',
+        chainId: 1,
+        type: 0,
+      };
+      const result = shield.validate({
+        yieldId,
+        unsignedTransaction: JSON.stringify(tx),
+        userAddress,
+      });
       expect(result.isValid).toBe(false);
       expect(result.reason).toContain('No matching operation pattern found');
       const swapAttempt = result.details?.attempts?.find(
@@ -1226,6 +1499,315 @@ describe('RocketPoolValidator via Shield', () => {
       expect(swapAttempt?.reason).toContain(
         'Failed to extract Diamond calldata from Permit2 Proxy',
       );
+    });
+
+    // --- Slippage floor ---
+    it('should reject SWAP with manipulated _minAmountOut (1 wei)', () => {
+      const manipulatedSwapCalldata = lifiSwapIface.encodeFunctionData(
+        'swapTokensSingleV3ERC20ToNative',
+        [
+          ethers.zeroPadValue('0x01', 32),
+          'stakekit',
+          '',
+          userAddress,
+          1n,
+          sampleSwapDataTuple,
+        ],
+      );
+      const tx = {
+        to: LIFI_DIAMOND,
+        from: userAddress,
+        value: '0x0',
+        data: manipulatedSwapCalldata,
+        nonce: 0,
+        gasLimit: '0x30d40',
+        gasPrice: '0x4a817c800',
+        chainId: 1,
+        type: 0,
+      };
+      const result = shield.validate({
+        yieldId,
+        unsignedTransaction: JSON.stringify(tx),
+        userAddress,
+      });
+      expect(result.isValid).toBe(false);
+      expect(result.reason).toContain('No matching operation pattern found');
+      const swapAttempt = result.details?.attempts?.find(
+        (a: any) => a.type === TransactionType.SWAP,
+      );
+      expect(swapAttempt?.reason).toContain('slippage floor');
+    });
+
+    it('should reject SWAP with zero _minAmountOut', () => {
+      const zeroMinSwapCalldata = lifiSwapIface.encodeFunctionData(
+        'swapTokensSingleV3ERC20ToNative',
+        [
+          ethers.zeroPadValue('0x01', 32),
+          'stakekit',
+          '',
+          userAddress,
+          0n,
+          sampleSwapDataTuple,
+        ],
+      );
+      const tx = {
+        to: LIFI_DIAMOND,
+        from: userAddress,
+        value: '0x0',
+        data: zeroMinSwapCalldata,
+        nonce: 0,
+        gasLimit: '0x30d40',
+        gasPrice: '0x4a817c800',
+        chainId: 1,
+        type: 0,
+      };
+      const result = shield.validate({
+        yieldId,
+        unsignedTransaction: JSON.stringify(tx),
+        userAddress,
+      });
+      expect(result.isValid).toBe(false);
+      expect(result.reason).toContain('No matching operation pattern found');
+      const swapAttempt = result.details?.attempts?.find(
+        (a: any) => a.type === TransactionType.SWAP,
+      );
+      expect(swapAttempt?.reason).toContain(
+        'Minimum amount out must be greater than zero',
+      );
+    });
+
+    it('should accept SWAP with _minAmountOut at exactly 80% of fromAmount', () => {
+      const exactFloorSwapCalldata = lifiSwapIface.encodeFunctionData(
+        'swapTokensSingleV3ERC20ToNative',
+        [
+          ethers.zeroPadValue('0x01', 32),
+          'stakekit',
+          '',
+          userAddress,
+          800000000000000000n,
+          sampleSwapDataTuple,
+        ],
+      );
+      const tx = {
+        to: LIFI_DIAMOND,
+        from: userAddress,
+        value: '0x0',
+        data: exactFloorSwapCalldata,
+        nonce: 0,
+        gasLimit: '0x30d40',
+        gasPrice: '0x4a817c800',
+        chainId: 1,
+        type: 0,
+      };
+      const result = shield.validate({
+        yieldId,
+        unsignedTransaction: JSON.stringify(tx),
+        userAddress,
+      });
+      expect(result.isValid).toBe(true);
+      expect(result.detectedType).toBe(TransactionType.SWAP);
+    });
+  
+    it('should reject SWAP with _minAmountOut just below 80% floor', () => {
+      const belowFloorSwapCalldata = lifiSwapIface.encodeFunctionData(
+        'swapTokensSingleV3ERC20ToNative',
+        [
+          ethers.zeroPadValue('0x01', 32),
+          'stakekit',
+          '',
+          userAddress,
+          800000000000000000n - 1n,
+          sampleSwapDataTuple,
+        ],
+      );
+      const tx = {
+        to: LIFI_DIAMOND,
+        from: userAddress,
+        value: '0x0',
+        data: belowFloorSwapCalldata,
+        nonce: 0,
+        gasLimit: '0x30d40',
+        gasPrice: '0x4a817c800',
+        chainId: 1,
+        type: 0,
+      };
+      const result = shield.validate({
+        yieldId,
+        unsignedTransaction: JSON.stringify(tx),
+        userAddress,
+      });
+      expect(result.isValid).toBe(false);
+      expect(result.reason).toContain('No matching operation pattern found');
+      const swapAttempt = result.details?.attempts?.find(
+        (a: any) => a.type === TransactionType.SWAP,
+      );
+      expect(swapAttempt?.reason).toContain('slippage floor');
+    });
+
+    it('should reject Permit2-wrapped SWAP with manipulated slippage', () => {
+      const manipulatedDiamondCalldata = lifiSwapIface.encodeFunctionData(
+        'swapTokensSingleV3ERC20ToNative',
+        [
+          ethers.zeroPadValue('0x01', 32),
+          'stakekit',
+          '',
+          userAddress,
+          1n,
+          sampleSwapDataTuple,
+        ],
+      );
+      const permit2WrappedManipulated =
+        permit2ProxyIface.encodeFunctionData('callDiamondWithPermit2', [
+          manipulatedDiamondCalldata,
+          dummyPermit,
+          dummySignature,
+        ]);
+      const tx = {
+        to: LIFI_PERMIT2_PROXY,
+        from: userAddress,
+        value: '0x0',
+        data: permit2WrappedManipulated,
+        nonce: 0,
+        gasLimit: '0x30d40',
+        gasPrice: '0x4a817c800',
+        chainId: 1,
+        type: 0,
+      };
+      const result = shield.validate({
+        yieldId,
+        unsignedTransaction: JSON.stringify(tx),
+        userAddress,
+      });
+      expect(result.isValid).toBe(false);
+      expect(result.reason).toContain('No matching operation pattern found');
+      const swapAttempt = result.details?.attempts?.find(
+        (a: any) => a.type === TransactionType.SWAP,
+      );
+      expect(swapAttempt?.reason).toContain('slippage floor');
+    });
+    
+    it('should reject a Multiple variant swap with manipulated slippage', () => {
+      const manipulatedMultipleCalldata = lifiSwapIface.encodeFunctionData(
+        'swapTokensMultipleV3ERC20ToNative',
+        [
+          ethers.zeroPadValue('0x01', 32),
+          'stakekit',
+          '',
+          userAddress,
+          1n,
+          [sampleSwapDataTuple],
+        ],
+      );
+      const tx = {
+        to: LIFI_DIAMOND,
+        from: userAddress,
+        value: '0x0',
+        data: manipulatedMultipleCalldata,
+        nonce: 0,
+        gasLimit: '0x30d40',
+        gasPrice: '0x4a817c800',
+        chainId: 1,
+        type: 0,
+      };
+      const result = shield.validate({
+        yieldId,
+        unsignedTransaction: JSON.stringify(tx),
+        userAddress,
+      });
+      expect(result.isValid).toBe(false);
+      expect(result.reason).toContain('No matching operation pattern found');
+      const swapAttempt = result.details?.attempts?.find(
+        (a: any) => a.type === TransactionType.SWAP,
+      );
+      expect(swapAttempt?.reason).toContain('slippage floor');
+    });
+
+    it('should sum fromAmount across multiple swapData entries for slippage check', () => {
+      const halfAmountSwapData = [
+        '0x0000000000000000000000000000000000000001',
+        '0x0000000000000000000000000000000000000001',
+        rETHAddress,
+        '0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2',
+        500000000000000000n, // 0.5 rETH
+        '0x',
+        false,
+      ];
+      // Two entries of 0.5 rETH = 1 rETH total, _minAmountOut = 0.9 ETH = 90%
+      const multiEntryCalldata = lifiSwapIface.encodeFunctionData(
+        'swapTokensMultipleV3ERC20ToNative',
+        [
+          ethers.zeroPadValue('0x01', 32),
+          'stakekit',
+          '',
+          userAddress,
+          900000000000000000n,
+          [halfAmountSwapData, halfAmountSwapData],
+        ],
+      );
+      const tx = {
+        to: LIFI_DIAMOND,
+        from: userAddress,
+        value: '0x0',
+        data: multiEntryCalldata,
+        nonce: 0,
+        gasLimit: '0x30d40',
+        gasPrice: '0x4a817c800',
+        chainId: 1,
+        type: 0,
+      };
+      const result = shield.validate({
+        yieldId,
+        unsignedTransaction: JSON.stringify(tx),
+        userAddress,
+      });
+      expect(result.isValid).toBe(true);
+      expect(result.detectedType).toBe(TransactionType.SWAP);
+    });
+
+    it('should reject Multiple swap when _minAmountOut is below floor of summed fromAmounts', () => {
+      const halfAmountSwapData = [
+        '0x0000000000000000000000000000000000000001',
+        '0x0000000000000000000000000000000000000001',
+        rETHAddress,
+        '0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2',
+        500000000000000000n, // 0.5 rETH
+        '0x',
+        false,
+      ];
+      // Two entries of 0.5 rETH = 1 rETH total, _minAmountOut = 1 wei
+      const manipulatedMultiEntryCalldata = lifiSwapIface.encodeFunctionData(
+        'swapTokensMultipleV3ERC20ToNative',
+        [
+          ethers.zeroPadValue('0x01', 32),
+          'stakekit',
+          '',
+          userAddress,
+          1n,
+          [halfAmountSwapData, halfAmountSwapData],
+        ],
+      );
+      const tx = {
+        to: LIFI_DIAMOND,
+        from: userAddress,
+        value: '0x0',
+        data: manipulatedMultiEntryCalldata,
+        nonce: 0,
+        gasLimit: '0x30d40',
+        gasPrice: '0x4a817c800',
+        chainId: 1,
+        type: 0,
+      };
+      const result = shield.validate({
+        yieldId,
+        unsignedTransaction: JSON.stringify(tx),
+        userAddress,
+      });
+      expect(result.isValid).toBe(false);
+      expect(result.reason).toContain('No matching operation pattern found');
+      const swapAttempt = result.details?.attempts?.find(
+        (a: any) => a.type === TransactionType.SWAP,
+      );
+      expect(swapAttempt?.reason).toContain('slippage floor');
     });
   });
 
