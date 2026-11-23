@@ -165,6 +165,8 @@ echo '{"apiVersion":"1.0","operation":"getSupportedYieldIds"}' | npx @yieldxyz/s
 ## Supported Yield IDs
 
 - `ethereum-eth-lido-staking`
+- `ethereum-eth-reth-staking`
+- `ethereum-eth-everstake-staking` (and `ethereum-hoodi-eth-everstake-staking` on the Hoodi testnet)
 - `solana-sol-native-multivalidator-staking`
 - `tron-trx-native-staking`
 - All generic ERC4626 vault yields from: Angle, Curve, Euler, Fluid, Gearbox, Idle Finance, Lista, Morpho, Sky, SummerFi, Venus Flux, Yearn, Yo Protocol
