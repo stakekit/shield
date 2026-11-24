@@ -1,6 +1,11 @@
 import { BaseValidator } from './base.validator';
 import { SolanaNativeStakingValidator } from './solana';
-import { LidoValidator, RocketPoolValidator } from './evm';
+import {
+  EverstakeValidator,
+  EVERSTAKE_NETWORKS,
+  LidoValidator,
+  RocketPoolValidator,
+} from './evm';
 import { TronValidator } from './tron';
 import { ERC4626Validator, loadEmbeddedRegistry } from './evm/erc4626';
 
@@ -14,6 +19,14 @@ const registry = new Map<string, BaseValidator>([
   ['ethereum-eth-lido-staking', new LidoValidator()],
   ['tron-trx-native-staking', new TronValidator()],
   ['ethereum-eth-reth-staking', new RocketPoolValidator()],
+  [
+    'ethereum-eth-everstake-staking',
+    new EverstakeValidator(EVERSTAKE_NETWORKS.mainnet),
+  ],
+  [
+    'ethereum-hoodi-eth-everstake-staking',
+    new EverstakeValidator(EVERSTAKE_NETWORKS.hoodi),
+  ],
 ]);
 
 export const GENERIC_ERC4626_PROTOCOLS = new Set([
