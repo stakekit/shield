@@ -1,10 +1,4 @@
-import {
-  AccountMeta,
-  PublicKey,
-  StakeInstruction,
-  Transaction,
-  TransactionInstruction,
-} from '@solana/web3.js';
+import { AccountMeta, PublicKey, StakeInstruction } from '@solana/web3.js';
 import {
   ActionArguments,
   TransactionType,
@@ -13,6 +7,7 @@ import {
 } from '../../../types';
 import { isNonEmptyString, isNullOrUndefined } from '../../../utils/validation';
 import { BaseValidator } from '../../base.validator';
+import { decodeSolanaTransaction, SolanaInstruction } from '../decode';
 
 type DecodedInstruction = {
   programId: string;
@@ -38,14 +33,17 @@ export class SolanaNativeStakingValidator extends BaseValidator {
     args?: ActionArguments,
     _context?: ValidationContext,
   ): ValidationResult {
-    const decoded = this.decodeSolanaTransaction(unsignedTransaction);
-    if (!decoded.isValid) {
+    const decoded = decodeSolanaTransaction(unsignedTransaction);
+    if (!decoded.ok) {
       return this.blocked('Failed to decode Solana transaction', {
         error: decoded.error,
       });
     }
 
-    const instructions = decoded.instructions!;
+    const instructions = decoded.tx.instructions.map((instruction) => ({
+      ...instruction,
+      instructionType: this.getSolanaInstructionType(instruction),
+    }));
 
     switch (transactionType) {
       case TransactionType.STAKE:
@@ -423,10 +421,8 @@ export class SolanaNativeStakingValidator extends BaseValidator {
     );
   }
 
-  private getSolanaInstructionType(
-    instruction: TransactionInstruction,
-  ): string {
-    const programId = instruction.programId.toBase58();
+  private getSolanaInstructionType(instruction: SolanaInstruction): string {
+    const programId = instruction.programId;
     const data = instruction.data;
     if (
       programId === 'Stake11111111111111111111111111111111111111' &&
@@ -489,42 +485,5 @@ export class SolanaNativeStakingValidator extends BaseValidator {
     }
 
     return 'Unknown';
-  }
-
-  private decodeSolanaTransaction(hexString: string): {
-    isValid: boolean;
-    instructions?: DecodedInstruction[];
-    error?: string;
-  } {
-    try {
-      const buffer = Buffer.from(hexString, 'hex');
-      const tx = Transaction.from(buffer);
-
-      const instructions = tx.instructions.map((instruction) => {
-        const programId = instruction.programId.toBase58();
-        const instructionType = this.getSolanaInstructionType(instruction);
-
-        return {
-          programId,
-          instructionType,
-          data: instruction.data,
-          accounts: instruction.keys.map((key) => ({
-            pubkey: key.pubkey,
-            isSigner: key.isSigner,
-            isWritable: key.isWritable,
-          })),
-        };
-      });
-
-      return {
-        isValid: true,
-        instructions,
-      };
-    } catch (error) {
-      return {
-        isValid: false,
-        error: error instanceof Error ? error.message : String(error),
-      };
-    }
   }
 }
