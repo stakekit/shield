@@ -39,6 +39,12 @@ export type ActionArguments = {
   nominatorAddress?: string;
   receiverAddress?: string;
   nftIds?: string[];
+  /**
+   * Solana MERGE / SPLIT (optional): signer-controlled stake account pubkeys.
+   * When provided, every merge destination and source, and the SPLIT source
+   * stake account, must be in this list.
+   */
+  stakeAccounts?: string[];
 };
 
 export interface FeeConfiguration {
