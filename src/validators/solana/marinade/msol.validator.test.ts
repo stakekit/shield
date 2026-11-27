@@ -229,6 +229,30 @@ describe('MarinadeMsolValidator via Shield', () => {
       expect(validate(tampered).isValid).toBe(false);
     });
 
+    it('rejects a delayed unstake ticket funded above its rent', () => {
+      const tampered = mutate(
+        MSOL_FIXTURES.unstakeDelayed,
+        replaceData((data) => {
+          data.writeBigUInt64LE(100_000_000_000n, data.length - 48);
+          return data;
+        }, 0),
+      );
+
+      expect(validate(tampered).isValid).toBe(false);
+    });
+
+    it('accepts a delayed unstake ticket funded below the current rent', () => {
+      const tampered = mutate(
+        MSOL_FIXTURES.unstakeDelayed,
+        replaceData((data) => {
+          data.writeBigUInt64LE(1_000_000n, data.length - 48);
+          return data;
+        }, 0),
+      );
+
+      expect(validate(tampered).isValid).toBe(true);
+    });
+
     it('rejects a delayed unstake ticket with the wrong size', () => {
       const tampered = mutate(
         MSOL_FIXTURES.unstakeDelayed,

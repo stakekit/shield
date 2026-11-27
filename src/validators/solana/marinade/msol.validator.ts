@@ -30,6 +30,7 @@ import {
   MARINADE_PROGRAM_ID,
   MARINADE_STATE,
   MARINADE_TICKET_ACCOUNT_SPACE,
+  MARINADE_TICKET_MAX_LAMPORTS,
   MSOL_MINT,
   MSOL_MINT_AUTHORITY_PDA,
   RESERVE_PDA,
@@ -248,6 +249,11 @@ export class MarinadeMsolValidator extends BaseValidator {
     if (BigInt(params.space) !== MARINADE_TICKET_ACCOUNT_SPACE) {
       return this.blocked('Ticket account has unexpected size', {
         space: params.space,
+      });
+    }
+    if (BigInt(params.lamports) > MARINADE_TICKET_MAX_LAMPORTS) {
+      return this.blocked('Ticket account is funded above its rent', {
+        lamports: params.lamports,
       });
     }
     if (params.newAccountPubkey.toBase58() !== ticket) {
