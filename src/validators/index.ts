@@ -1,5 +1,9 @@
 import { BaseValidator } from './base.validator';
-import { MarinadeMsolValidator, SolanaNativeStakingValidator } from './solana';
+import {
+  MarinadeMsolValidator,
+  MarinadeNativeValidator,
+  SolanaNativeStakingValidator,
+} from './solana';
 import {
   EverstakeValidator,
   EVERSTAKE_NETWORKS,
@@ -17,6 +21,10 @@ const registry = new Map<string, BaseValidator>([
     new SolanaNativeStakingValidator(),
   ],
   ['solana-sol-marinade-staking', new MarinadeMsolValidator()],
+  [
+    'solana-sol-marinade-native-max-yield-staking',
+    new MarinadeNativeValidator(),
+  ],
   ['ethereum-eth-lido-staking', new LidoValidator()],
   ['tron-trx-native-staking', new TronValidator()],
   ['ethereum-eth-reth-staking', new RocketPoolValidator()],

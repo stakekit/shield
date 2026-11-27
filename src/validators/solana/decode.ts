@@ -95,3 +95,17 @@ export function toTransactionInstruction(
     data: instruction.data,
   });
 }
+
+export type Decoded<T> = { ok: true; value: T } | { ok: false; error: string };
+
+/** Runs a web3.js instruction decoder, turning a throw into an error result. */
+export function tryDecode<T>(decode: () => T): Decoded<T> {
+  try {
+    return { ok: true, value: decode() };
+  } catch (error) {
+    return {
+      ok: false,
+      error: error instanceof Error ? error.message : String(error),
+    };
+  }
+}

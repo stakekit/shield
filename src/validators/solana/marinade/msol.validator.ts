@@ -20,6 +20,7 @@ import {
   findAccountMismatch,
   SolanaInstruction,
   toTransactionInstruction,
+  tryDecode,
 } from '../decode';
 import {
   LIQ_POOL_MSOL_LEG,
@@ -213,21 +214,20 @@ export class MarinadeMsolValidator extends BaseValidator {
         'Ticket creation is not a System program instruction',
       );
     }
-    let params: ReturnType<typeof SystemInstruction.decodeCreateWithSeed>;
-    try {
+    const decoded = tryDecode(() => {
       const transactionInstruction = toTransactionInstruction(instruction);
       if (
         SystemInstruction.decodeInstructionType(transactionInstruction) !==
         'CreateWithSeed'
       ) {
-        return this.blocked('Ticket creation is not CreateAccountWithSeed');
+        throw new Error('not CreateAccountWithSeed');
       }
-      params = SystemInstruction.decodeCreateWithSeed(transactionInstruction);
-    } catch (error) {
-      return this.blocked('Failed to decode ticket creation', {
-        error: error instanceof Error ? error.message : String(error),
-      });
+      return SystemInstruction.decodeCreateWithSeed(transactionInstruction);
+    });
+    if (!decoded.ok) {
+      return this.blocked('Invalid ticket creation', { error: decoded.error });
     }
+    const params = decoded.value;
 
     const ticket = createWithSeed(
       userAddress,

@@ -2,6 +2,7 @@ import {
   accountAt,
   decodeSolanaTransaction,
   findAccountMismatch,
+  tryDecode,
 } from './decode';
 import { FIXTURE_USER, MSOL_FIXTURES } from './marinade/marinade.fixtures';
 
@@ -58,5 +59,19 @@ describe('findAccountMismatch', () => {
 
   it('reports a different account count', () => {
     expect(findAccountMismatch(claim, accounts.slice(1))?.index).toBe(-1);
+  });
+});
+
+describe('tryDecode', () => {
+  it('returns the decoded value', () => {
+    expect(tryDecode(() => 42)).toEqual({ ok: true, value: 42 });
+  });
+
+  it('returns the thrown error message', () => {
+    expect(
+      tryDecode(() => {
+        throw new Error('bad layout');
+      }),
+    ).toEqual({ ok: false, error: 'bad layout' });
   });
 });
