@@ -308,3 +308,45 @@ describe('MarinadeNativeValidator declared amount', () => {
     },
   );
 });
+
+describe('MarinadeNativeValidator amounts above 2^53 lamports', () => {
+  const unsafe = 9_007_199_254_740_993n;
+  const CREATE_WITH_SEED_LAMPORTS_FROM_END = 48;
+
+  const withdrawUnsafe = mutate(
+    NATIVE_FIXTURES.withdraw,
+    writeLamports(0, unsafe),
+  );
+  const stakeUnsafe = mutate(
+    NATIVE_FIXTURES.stake,
+    replaceData(0, (data) => {
+      data.writeBigUInt64LE(
+        unsafe,
+        data.length - CREATE_WITH_SEED_LAMPORTS_FROM_END,
+      );
+      return data;
+    }),
+  );
+
+  it.each([
+    ['withdraw', withdrawUnsafe],
+    ['stake', stakeUnsafe],
+  ])('accepts %s with the exact declared amount', (_name, tx) => {
+    expect(validate(tx, { amount: unsafe.toString() }).isValid).toBe(true);
+  });
+
+  it.each([
+    ['withdraw', withdrawUnsafe],
+    ['stake', stakeUnsafe],
+  ])('rejects %s with a declared amount one lamport lower', (_name, tx) => {
+    expect(validate(tx, { amount: (unsafe - 1n).toString() }).isValid).toBe(
+      false,
+    );
+  });
+
+  it('compares the memo amount as an integer', () => {
+    expect(
+      validate(NATIVE_FIXTURES.unstake, { amount: '01000000000' }).isValid,
+    ).toBe(true);
+  });
+});

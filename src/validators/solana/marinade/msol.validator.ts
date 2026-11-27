@@ -20,6 +20,7 @@ import {
 import {
   decodeSolanaTransaction,
   findAccountMismatch,
+  readCreateWithSeedLamports,
   SolanaInstruction,
   toTransactionInstruction,
   tryDecode,
@@ -276,9 +277,10 @@ export class MarinadeMsolValidator extends BaseValidator {
         space: params.space,
       });
     }
-    if (BigInt(params.lamports) > MARINADE_TICKET_MAX_LAMPORTS) {
+    const lamports = readCreateWithSeedLamports(instruction);
+    if (lamports > MARINADE_TICKET_MAX_LAMPORTS) {
       return this.blocked('Ticket account is funded above its rent', {
-        lamports: params.lamports,
+        lamports: lamports.toString(),
       });
     }
     if (params.newAccountPubkey.toBase58() !== ticket) {

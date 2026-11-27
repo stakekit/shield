@@ -109,3 +109,24 @@ export function tryDecode<T>(decode: () => T): Decoded<T> {
     };
   }
 }
+
+const INSTRUCTION_INDEX_LENGTH = 4;
+// CreateAccountWithSeed ends with lamports (u64), space (u64), owner (32 bytes).
+const CREATE_WITH_SEED_LAMPORTS_FROM_END = 48;
+
+/**
+ * Reads the u64 that follows the 4-byte instruction index, as in System
+ * `Transfer` and Stake `Withdraw`. web3.js decoders return these lamports as
+ * a `number`, which loses precision above 2^53.
+ */
+export function readU64AfterIndex(instruction: SolanaInstruction): bigint {
+  return instruction.data.readBigUInt64LE(INSTRUCTION_INDEX_LENGTH);
+}
+
+/** Reads the lamports of a System `CreateAccountWithSeed` exactly. */
+export function readCreateWithSeedLamports(
+  instruction: SolanaInstruction,
+): bigint {
+  const { data } = instruction;
+  return data.readBigUInt64LE(data.length - CREATE_WITH_SEED_LAMPORTS_FROM_END);
+}

@@ -25,6 +25,8 @@ import {
 import {
   decodeSolanaTransaction,
   findAccountMismatch,
+  readCreateWithSeedLamports,
+  readU64AfterIndex,
   SolanaInstruction,
   toTransactionInstruction,
   tryDecode,
@@ -132,8 +134,8 @@ export class MarinadeNativeValidator extends BaseValidator {
         error: created.error,
       });
     }
-    const { fromPubkey, basePubkey, seed, programId, space, lamports } =
-      created.value;
+    const { fromPubkey, basePubkey, seed, programId, space } = created.value;
+    const lamports = readCreateWithSeedLamports(create);
     const stakeAccount = createWithSeed(userAddress, seed, STAKE_PROGRAM_ID);
     if (
       fromPubkey.toBase58() !== userAddress ||
@@ -144,15 +146,15 @@ export class MarinadeNativeValidator extends BaseValidator {
     if (programId.toBase58() !== STAKE_PROGRAM_ID) {
       return this.blocked('Created account is not owned by the Stake program');
     }
-    if (space !== StakeProgram.space || BigInt(lamports) === 0n) {
+    if (space !== StakeProgram.space || lamports === 0n) {
       return this.blocked('Stake account has unexpected size or balance', {
         space,
-        lamports,
+        lamports: lamports.toString(),
       });
     }
-    if (!matchesDeclaredAmount(BigInt(lamports), declaredAmount)) {
+    if (!matchesDeclaredAmount(lamports, declaredAmount)) {
       return this.blocked('Stake amount does not match declared amount', {
-        lamports,
+        lamports: lamports.toString(),
         declared: declaredAmount,
       });
     }
@@ -233,13 +235,11 @@ export class MarinadeNativeValidator extends BaseValidator {
     if (!transfer.ok) {
       return this.blocked('Invalid fee payment', { error: transfer.error });
     }
-    if (
-      BigInt(transfer.value.lamports) !==
-      NATIVE_PREPARE_FOR_REVOKE_COST_LAMPORTS
-    ) {
+    const feeLamports = readU64AfterIndex(fee);
+    if (feeLamports !== NATIVE_PREPARE_FOR_REVOKE_COST_LAMPORTS) {
       return this.blocked('Fee payment amount does not match', {
         expected: NATIVE_PREPARE_FOR_REVOKE_COST_LAMPORTS.toString(),
-        actual: transfer.value.lamports.toString(),
+        actual: feeLamports.toString(),
       });
     }
     const feeResult = this.checkAccounts(fee, 'Fee payment', [
@@ -286,7 +286,11 @@ export class MarinadeNativeValidator extends BaseValidator {
         amount,
       });
     }
-    if (declaredAmount !== undefined && amount !== declaredAmount) {
+    if (
+      declaredAmount !== undefined &&
+      (amount === undefined ||
+        !matchesDeclaredAmount(BigInt(amount), declaredAmount))
+    ) {
       return this.blocked(
         'PrepareForRevoke amount does not match declared amount',
         { amount, declared: declaredAmount },
@@ -318,7 +322,7 @@ export class MarinadeNativeValidator extends BaseValidator {
     if (!params.ok) {
       return this.blocked('Invalid Withdraw', { error: params.error });
     }
-    const lamports = BigInt(params.value.lamports);
+    const lamports = readU64AfterIndex(withdraw);
     if (lamports === 0n) {
       return this.blocked('Withdraw amount must be greater than zero');
     }
