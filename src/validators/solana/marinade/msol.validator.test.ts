@@ -305,3 +305,47 @@ describe('MarinadeMsolValidator via Shield', () => {
     });
   });
 });
+
+describe('MarinadeMsolValidator declared amount', () => {
+  function validateWithAmount(unsignedTransaction: string, amount: string) {
+    return shield.validate({
+      yieldId,
+      unsignedTransaction,
+      userAddress: FIXTURE_USER,
+      args: { amount },
+    });
+  }
+
+  it.each([
+    ['stake', '1000000000'],
+    ['unstakeInstant', '500000000'],
+    ['unstakeDelayed', '500000000'],
+  ] as const)('accepts %s when the amount matches', (name, amount) => {
+    expect(validateWithAmount(MSOL_FIXTURES[name], amount).isValid).toBe(true);
+  });
+
+  it.each([
+    ['stake', '999999999'],
+    ['stake', '1'],
+    ['unstakeInstant', '500000001'],
+    ['unstakeDelayed', '499999999'],
+  ] as const)('rejects %s when the amount is %s', (name, amount) => {
+    expect(validateWithAmount(MSOL_FIXTURES[name], amount).isValid).toBe(false);
+  });
+
+  it.each([['1.5'], ['-1'], ['0x10'], ['1e9']])(
+    'rejects a declared amount of %p',
+    (amount) => {
+      expect(validateWithAmount(MSOL_FIXTURES.stake, amount).isValid).toBe(
+        false,
+      );
+    },
+  );
+
+  it.each([['createAccount'], ['withdraw']] as const)(
+    'ignores the declared amount on %s, which carries none',
+    (name) => {
+      expect(validateWithAmount(MSOL_FIXTURES[name], '1').isValid).toBe(true);
+    },
+  );
+});

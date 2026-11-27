@@ -10,6 +10,7 @@ import {
   ValidationContext,
   ValidationResult,
 } from '../../../types';
+import { matchesDeclaredAmount } from '../../../utils/amount';
 import { isNonEmptyString } from '../../../utils/validation';
 import { BaseValidator } from '../../base.validator';
 import {
@@ -35,6 +36,7 @@ import {
 } from './constants';
 
 const POSITIVE_INTEGER = /^[1-9][0-9]*$/;
+const BASE_UNITS = /^[0-9]+$/;
 
 /**
  * Validates transactions for Marinade Native staking: creating a stake
@@ -67,17 +69,34 @@ export class MarinadeNativeValidator extends BaseValidator {
     if (feePayer !== userAddress) {
       return this.blocked('Fee payer is not user address', { feePayer });
     }
+    const declaredAmount = isNonEmptyString(args?.amount)
+      ? args.amount
+      : undefined;
+    if (declaredAmount !== undefined && !BASE_UNITS.test(declaredAmount)) {
+      return this.blocked('Declared amount is not an integer in base units', {
+        declared: declaredAmount,
+      });
+    }
 
     switch (transactionType) {
       case TransactionType.STAKE:
-        return this.validateStake(instructions, userAddress);
+        return this.validateStake(instructions, userAddress, declaredAmount);
       case TransactionType.UNSTAKE:
-        return this.validatePrepareForRevoke(instructions, userAddress);
+        return this.validatePrepareForRevoke(
+          instructions,
+          userAddress,
+          declaredAmount,
+        );
       case TransactionType.WITHDRAW: {
         const receiver = isNonEmptyString(args?.receiverAddress)
           ? args.receiverAddress
           : userAddress;
-        return this.validateWithdraw(instructions, userAddress, receiver);
+        return this.validateWithdraw(
+          instructions,
+          userAddress,
+          receiver,
+          declaredAmount,
+        );
       }
       default:
         return this.blocked('Unsupported transaction type', {
@@ -89,6 +108,7 @@ export class MarinadeNativeValidator extends BaseValidator {
   private validateStake(
     instructions: SolanaInstruction[],
     userAddress: string,
+    declaredAmount: string | undefined,
   ): ValidationResult {
     if (instructions.length !== 2) {
       return this.invalidCount(TransactionType.STAKE, 2, instructions);
@@ -128,6 +148,12 @@ export class MarinadeNativeValidator extends BaseValidator {
       return this.blocked('Stake account has unexpected size or balance', {
         space,
         lamports,
+      });
+    }
+    if (!matchesDeclaredAmount(BigInt(lamports), declaredAmount)) {
+      return this.blocked('Stake amount does not match declared amount', {
+        lamports,
+        declared: declaredAmount,
       });
     }
     const createMismatch = findAccountMismatch(create, [
@@ -188,6 +214,7 @@ export class MarinadeNativeValidator extends BaseValidator {
   private validatePrepareForRevoke(
     instructions: SolanaInstruction[],
     userAddress: string,
+    declaredAmount: string | undefined,
   ): ValidationResult {
     if (instructions.length !== 2) {
       return this.invalidCount(TransactionType.UNSTAKE, 2, instructions);
@@ -221,12 +248,13 @@ export class MarinadeNativeValidator extends BaseValidator {
     ]);
     if (!feeResult.isValid) return feeResult;
 
-    return this.validateMemo(memo, userAddress);
+    return this.validateMemo(memo, userAddress, declaredAmount);
   }
 
   private validateMemo(
     memo: SolanaInstruction,
     userAddress: string,
+    declaredAmount: string | undefined,
   ): ValidationResult {
     if (memo.programId !== MEMO_PROGRAM_ID) {
       return this.blocked('Second instruction is not a memo');
@@ -258,6 +286,12 @@ export class MarinadeNativeValidator extends BaseValidator {
         amount,
       });
     }
+    if (declaredAmount !== undefined && amount !== declaredAmount) {
+      return this.blocked(
+        'PrepareForRevoke amount does not match declared amount',
+        { amount, declared: declaredAmount },
+      );
+    }
     return this.safe();
   }
 
@@ -265,6 +299,7 @@ export class MarinadeNativeValidator extends BaseValidator {
     instructions: SolanaInstruction[],
     userAddress: string,
     receiverAddress: string,
+    declaredAmount: string | undefined,
   ): ValidationResult {
     if (instructions.length !== 1) {
       return this.invalidCount(TransactionType.WITHDRAW, 1, instructions);
@@ -283,8 +318,15 @@ export class MarinadeNativeValidator extends BaseValidator {
     if (!params.ok) {
       return this.blocked('Invalid Withdraw', { error: params.error });
     }
-    if (BigInt(params.value.lamports) === 0n) {
+    const lamports = BigInt(params.value.lamports);
+    if (lamports === 0n) {
       return this.blocked('Withdraw amount must be greater than zero');
+    }
+    if (!matchesDeclaredAmount(lamports, declaredAmount)) {
+      return this.blocked('Withdraw amount does not match declared amount', {
+        lamports: lamports.toString(),
+        declared: declaredAmount,
+      });
     }
     return this.checkAccounts(withdraw, 'Withdraw', [
       null,

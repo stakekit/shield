@@ -5,6 +5,8 @@ import {
   ValidationContext,
   ValidationResult,
 } from '../../../types';
+import { matchesDeclaredAmount } from '../../../utils/amount';
+import { isNonEmptyString } from '../../../utils/validation';
 import { BaseValidator } from '../../base.validator';
 import {
   ASSOCIATED_TOKEN_PROGRAM_ID,
@@ -37,6 +39,7 @@ import {
 } from './constants';
 
 const AMOUNT_INSTRUCTION_LENGTH = 16;
+const BASE_UNITS = /^[0-9]+$/;
 const DISCRIMINATOR_LENGTH = 8;
 
 /**
@@ -57,7 +60,7 @@ export class MarinadeMsolValidator extends BaseValidator {
     unsignedTransaction: string,
     transactionType: TransactionType,
     userAddress: string,
-    _args?: ActionArguments,
+    args?: ActionArguments,
     _context?: ValidationContext,
   ): ValidationResult {
     const decoded = decodeSolanaTransaction(unsignedTransaction);
@@ -70,16 +73,32 @@ export class MarinadeMsolValidator extends BaseValidator {
     if (feePayer !== userAddress) {
       return this.blocked('Fee payer is not user address', { feePayer });
     }
+    const declaredAmount = isNonEmptyString(args?.amount)
+      ? args.amount
+      : undefined;
+    if (declaredAmount !== undefined && !BASE_UNITS.test(declaredAmount)) {
+      return this.blocked('Declared amount is not an integer in base units', {
+        declared: declaredAmount,
+      });
+    }
 
     switch (transactionType) {
       case TransactionType.CREATE_ACCOUNT:
         return this.validateCreateAccount(instructions, userAddress);
       case TransactionType.STAKE:
-        return this.validateDeposit(instructions, userAddress);
+        return this.validateDeposit(instructions, userAddress, declaredAmount);
       case TransactionType.UNSTAKE:
         return instructions.length === 1
-          ? this.validateLiquidUnstake(instructions, userAddress)
-          : this.validateOrderUnstake(instructions, userAddress);
+          ? this.validateLiquidUnstake(
+              instructions,
+              userAddress,
+              declaredAmount,
+            )
+          : this.validateOrderUnstake(
+              instructions,
+              userAddress,
+              declaredAmount,
+            );
       case TransactionType.WITHDRAW:
         return this.validateClaim(instructions, userAddress);
       default:
@@ -120,6 +139,7 @@ export class MarinadeMsolValidator extends BaseValidator {
   private validateDeposit(
     instructions: SolanaInstruction[],
     userAddress: string,
+    declaredAmount: string | undefined,
   ): ValidationResult {
     if (instructions.length !== 1) {
       return this.invalidCount(TransactionType.STAKE, 1, instructions);
@@ -128,6 +148,7 @@ export class MarinadeMsolValidator extends BaseValidator {
     const dataError = this.checkAmountInstruction(
       deposit,
       MARINADE_DISCRIMINATORS.deposit,
+      declaredAmount,
     );
     if (dataError !== undefined)
       return this.blocked(`Invalid deposit: ${dataError}`);
@@ -150,11 +171,13 @@ export class MarinadeMsolValidator extends BaseValidator {
   private validateLiquidUnstake(
     instructions: SolanaInstruction[],
     userAddress: string,
+    declaredAmount: string | undefined,
   ): ValidationResult {
     const [unstake] = instructions;
     const dataError = this.checkAmountInstruction(
       unstake,
       MARINADE_DISCRIMINATORS.liquidUnstake,
+      declaredAmount,
     );
     if (dataError !== undefined)
       return this.blocked(`Invalid liquid unstake: ${dataError}`);
@@ -178,6 +201,7 @@ export class MarinadeMsolValidator extends BaseValidator {
   private validateOrderUnstake(
     instructions: SolanaInstruction[],
     userAddress: string,
+    declaredAmount: string | undefined,
   ): ValidationResult {
     if (instructions.length !== 2) {
       return this.invalidCount(TransactionType.UNSTAKE, '1 or 2', instructions);
@@ -189,6 +213,7 @@ export class MarinadeMsolValidator extends BaseValidator {
     const dataError = this.checkAmountInstruction(
       orderUnstake,
       MARINADE_DISCRIMINATORS.orderUnstake,
+      declaredAmount,
     );
     if (dataError !== undefined)
       return this.blocked(`Invalid order unstake: ${dataError}`);
@@ -296,6 +321,7 @@ export class MarinadeMsolValidator extends BaseValidator {
   private checkAmountInstruction(
     instruction: SolanaInstruction,
     discriminator: Buffer,
+    declaredAmount: string | undefined,
   ): string | undefined {
     if (instruction.programId !== MARINADE_PROGRAM_ID) {
       return 'not a Marinade instruction';
@@ -307,8 +333,12 @@ export class MarinadeMsolValidator extends BaseValidator {
     if (!data.subarray(0, DISCRIMINATOR_LENGTH).equals(discriminator)) {
       return 'unexpected discriminator';
     }
-    if (data.readBigUInt64LE(DISCRIMINATOR_LENGTH) === 0n) {
+    const amount = data.readBigUInt64LE(DISCRIMINATOR_LENGTH);
+    if (amount === 0n) {
       return 'amount must be greater than zero';
+    }
+    if (!matchesDeclaredAmount(amount, declaredAmount)) {
+      return `amount ${amount} does not match declared amount ${declaredAmount}`;
     }
     return undefined;
   }

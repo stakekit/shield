@@ -275,3 +275,36 @@ describe('MarinadeNativeValidator via Shield', () => {
     });
   });
 });
+
+describe('MarinadeNativeValidator declared amount', () => {
+  it.each([
+    ['stake', '2000000000'],
+    ['unstake', '1000000000'],
+    ['withdraw', '1000000000'],
+  ] as const)('accepts %s when the amount matches', (name, amount) => {
+    expect(validate(NATIVE_FIXTURES[name], { amount }).isValid).toBe(true);
+  });
+
+  it.each([
+    ['stake', '1999999999'],
+    ['unstake', '1'],
+    ['withdraw', '1000000001'],
+  ] as const)('rejects %s when the amount is %s', (name, amount) => {
+    expect(validate(NATIVE_FIXTURES[name], { amount }).isValid).toBe(false);
+  });
+
+  it('rejects an unstake whose memo has no amount when one is declared', () => {
+    const memo = `{"PrepareForRevoke":{"user":"${FIXTURE_USER}"}}`;
+
+    expect(validate(withMemo(memo), { amount: '1000000000' }).isValid).toBe(
+      false,
+    );
+  });
+
+  it.each([['1.5'], ['-1'], ['abc']])(
+    'rejects a declared amount of %p',
+    (amount) => {
+      expect(validate(NATIVE_FIXTURES.stake, { amount }).isValid).toBe(false);
+    },
+  );
+});
