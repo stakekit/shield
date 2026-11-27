@@ -31,7 +31,7 @@ export const MARINADE_DISCRIMINATORS = {
 
 export const MARINADE_TICKET_ACCOUNT_SPACE = 88n;
 /** Rent-exempt minimum for an 88-byte account: (88 + 128) * 6960 lamports. */
-export const MARINADE_TICKET_MAX_LAMPORTS = 1_503_360n;
+export const MARINADE_TICKET_RENT_LAMPORTS = 1_503_360n;
 
 export const NATIVE_STAKE_AUTHORITY =
   'stWirqFCf2Uts1JBL1Jsd3r6VBWhgnpdPxCTe1MFjrq';

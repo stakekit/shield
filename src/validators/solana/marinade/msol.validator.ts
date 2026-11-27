@@ -33,7 +33,7 @@ import {
   MARINADE_PROGRAM_ID,
   MARINADE_STATE,
   MARINADE_TICKET_ACCOUNT_SPACE,
-  MARINADE_TICKET_MAX_LAMPORTS,
+  MARINADE_TICKET_RENT_LAMPORTS,
   MSOL_MINT,
   MSOL_MINT_AUTHORITY_PDA,
   RESERVE_PDA,
@@ -278,9 +278,10 @@ export class MarinadeMsolValidator extends BaseValidator {
       });
     }
     const lamports = readCreateWithSeedLamports(instruction);
-    if (lamports > MARINADE_TICKET_MAX_LAMPORTS) {
-      return this.blocked('Ticket account is funded above its rent', {
-        lamports: lamports.toString(),
+    if (lamports !== MARINADE_TICKET_RENT_LAMPORTS) {
+      return this.blocked('Ticket account is not funded with its exact rent', {
+        expected: MARINADE_TICKET_RENT_LAMPORTS.toString(),
+        actual: lamports.toString(),
       });
     }
     if (params.newAccountPubkey.toBase58() !== ticket) {
