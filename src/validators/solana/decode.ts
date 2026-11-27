@@ -1,4 +1,9 @@
-import { AccountMeta, Transaction } from '@solana/web3.js';
+import {
+  AccountMeta,
+  PublicKey,
+  Transaction,
+  TransactionInstruction,
+} from '@solana/web3.js';
 
 export type SolanaInstruction = {
   programId: string;
@@ -49,4 +54,44 @@ export function accountAt(
   index: number,
 ): string | undefined {
   return instruction.accounts.at(index)?.pubkey.toBase58();
+}
+
+export type AccountMismatch = {
+  index: number;
+  expected: string | null;
+  actual: string | undefined;
+};
+
+/**
+ * Compares an instruction's accounts to an expected list. `null` accepts any
+ * account at that position. The account count must match exactly.
+ */
+export function findAccountMismatch(
+  instruction: SolanaInstruction,
+  expected: ReadonlyArray<string | null>,
+): AccountMismatch | undefined {
+  if (instruction.accounts.length !== expected.length) {
+    return {
+      index: -1,
+      expected: `${expected.length} accounts`,
+      actual: `${instruction.accounts.length} accounts`,
+    };
+  }
+  for (const [index, address] of expected.entries()) {
+    const actual = accountAt(instruction, index);
+    if (address !== null && actual !== address) {
+      return { index, expected: address, actual };
+    }
+  }
+  return undefined;
+}
+
+export function toTransactionInstruction(
+  instruction: SolanaInstruction,
+): TransactionInstruction {
+  return new TransactionInstruction({
+    programId: new PublicKey(instruction.programId),
+    keys: instruction.accounts,
+    data: instruction.data,
+  });
 }
