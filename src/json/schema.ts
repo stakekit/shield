@@ -41,6 +41,7 @@ export const requestSchema = {
 
         // Future use - include for forward compatibility
         amount: { type: 'string', maxLength: 78, pattern: '^[0-9]+$' }, // Max uint256 is 78 digits
+        shareAmount: { type: 'string', maxLength: 78, pattern: '^[0-9]+$' },
         decimals: { type: 'integer', minimum: 0, maximum: 255 },
         tronResource: { type: 'string', enum: ['BANDWIDTH', 'ENERGY'] },
         providerId: { type: 'string', maxLength: 256 },
@@ -77,7 +78,16 @@ export const requestSchema = {
             properties: {
               depositFeeBps: { type: 'number', minimum: 0, maximum: 10000 },
               feeRecipientAddress: { type: 'string', maxLength: 128 },
-              allocatorVaultAddress: { type: 'string', maxLength: 128 },
+              allocatorVaultAddress: {
+                type: 'string',
+                maxLength: 128,
+                pattern: '^0x[0-9a-fA-F]{40}$',
+              },
+              allocatorVaultInputTokenAddress: {
+                type: 'string',
+                maxLength: 128,
+                pattern: '^0x[0-9a-fA-F]{40}$',
+              },
             },
           },
         },

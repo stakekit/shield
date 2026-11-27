@@ -165,6 +165,8 @@ echo '{"apiVersion":"1.0","operation":"getSupportedYieldIds"}' | npx @yieldxyz/s
 ## Supported Yield IDs
 
 - `ethereum-eth-lido-staking`
+- `ethereum-eth-reth-staking`
+- `ethereum-eth-everstake-staking` (and `ethereum-hoodi-eth-everstake-staking` on the Hoodi testnet)
 - `solana-sol-native-multivalidator-staking`
 - `tron-trx-native-staking`
 - All generic ERC4626 vault yields from: Angle, Curve, Euler, Fluid, Gearbox, Idle Finance, Lista, Morpho, Sky, SummerFi, Venus Flux, Yearn, Yo Protocol
@@ -191,6 +193,60 @@ Shield validates the following operations for all supported ERC4626 vaults:
 | WETH Wrap   | WRAP             | Convert native ETH to WETH (WETH vaults only) |
 | WETH Unwrap | UNWRAP           | Convert WETH to native ETH (WETH vaults only) |
 
+
+### Amount intent (`args`) — ERC-4626 enter & exit
+
+Amount checks are **opt-in**. If you omit `args.amount` / `args.shareAmount`, Shield runs only structural checks (vault whitelist, owner/receiver, method, non-zero).
+
+**Units:** pass **base-unit integer strings (wei)** only — the same scale as calldata. Human values like `"0.01"` are rejected.
+
+| Calldata | Pass to Shield | Match rule |
+| -------- | -------------- | ---------- |
+| `deposit` / `approve` / `WRAP` | `args.amount` (asset wei) | Exact |
+| `withdraw(assets, …)` | `args.amount` (asset wei) | Within **10** wei (monorepo near-max snap) |
+| `redeem(shares, …)` | `args.shareAmount` (share wei) | Within margin (see below) |
+
+Do **not** declare both `amount` and `shareAmount`. Do **not** pass asset `amount` on a `redeem`, or `shareAmount` on a `withdraw` (fail-closed).
+
+**Match the built tx, not only what you sent the Yield API:**
+
+| Yield API exit | Typical calldata | Shield args |
+| -------------- | ---------------- | ----------- |
+| `amount` with withdraw-on-amount (team flag off) | `withdraw(assets)` | `amount` = asset wei |
+| `shareAmount` / `shareAmountRaw` | `redeem(shares)` | `shareAmount` = share wei |
+| `useMaxAmount: true` | `redeem(maxRedeem)` | `shareAmount` from balances `shareAmountRaw`, or omit intent |
+
+```typescript
+// Partial exit — withdraw(assets)
+shield.validate({
+  unsignedTransaction,
+  yieldId,
+  userAddress,
+  args: { amount: '1000000' }, // 1 USDC @ 6 decimals, wei
+});
+
+// Share exit — redeem(shares)
+shield.validate({
+  unsignedTransaction,
+  yieldId,
+  userAddress,
+  args: { shareAmount: '1000000000000000000' }, // 1 share @ 18 decimals
+});
+
+// Full exit (useMaxAmount) — redeem; declare the share balance, not an asset amount
+shield.validate({
+  unsignedTransaction,
+  yieldId,
+  userAddress,
+  args: { shareAmount: balance.shareAmountRaw },
+});
+```
+
+**Redeem margin**
+
+- Default / underlying vault: **`"10"`** share wei.
+- Allocator / OAV target (`tx.to` in the registry's `allocatorVaults`): decimal-gap margin `10^(abs(inputDecimals − vaultDecimals) + 1)` — e.g. USDC 6 vs shares 18 → `10^13` — except a small hardcoded set of OAVs that stay at `"10"` for parity with the Yield API exit path.
+
 ## API Reference
 
 ### `shield.validate(request)`
@@ -205,7 +261,7 @@ Validates a transaction by auto-detecting its type.
   yieldId: string;              // Yield integration ID
   userAddress: string;          // User's wallet address
   args?: ActionArguments;       // Optional arguments
-  context?: ValidationContext;  // Optional context
+  context?: ValidationContext;  // Trusted control-plane data (see Runtime OAV injection)
 }
 ```
 
@@ -248,7 +304,37 @@ Shield is designed with security as a top priority:
 
 ### Embedded Vault Registry
 
-ERC4626 vault data is embedded in the package at build time from `vault-registry.json`. The registry includes allocator vault (OAV) addresses for yields with fee configurations. Transactions targeting allocator vaults are validated using the same ERC4626 standard.
+ERC-4626 vault data is embedded at build time from the **installed package’s** `vault-registry.json` (addresses, token decimals, and `allocatorVaults`). Transactions to known allocator vaults use the same ERC-4626 checks.
+Treat that snapshot as a baseline for third-party vaults, not as the decision gate for “is this project OAV already allowed?” The copy on GitHub `main` can lag the package you actually run, and both can lag newly deployed OAVs. Always pass your project’s OAVs in `context` (additive; see below). A registry re-export + publish is convenience for the static snapshot, not a prerequisite for validating a live OAV.
+
+### Runtime OAV injection (`context`)
+
+  For OAV-enabled ERC-4626 yields, pass project OAVs on every `validate` call. Injection is **additive**: it can unblock a legitimate OAV that is missing from the baked snapshot; it does not remove static-registry vaults.
+
+  ```typescript
+  shield.validate({
+    unsignedTransaction,
+    yieldId,
+    userAddress,
+    args, // optional
+    context: {
+      feeConfiguration: [
+        {
+          allocatorVaultAddress: '0x…', // OAV / allocator vault
+          // Required for injected-OAV APPROVAL. Omit only if you are not
+          // validating approvals against this OAV (supply/withdraw still pass).
+          allocatorVaultInputTokenAddress: '0x…', // that OAV's underlying token
+        },
+      ],
+    },
+  });
+  ```
+  
+  `allocatorVaultInputTokenAddress` is required for **injected-OAV APPROVAL**. Shield checks the approval token against this address. If it is omitted or does not match, APPROVAL is blocked. Supply and withdraw still succeed if you pass only `allocatorVaultAddress`. The token may differ from the yield’s base vault (e.g. a meta-vault).
+
+  **Trust boundary:** `context` is trusted control-plane data. Populate it server-side from the project’s own authenticated fee-configuration / OAV records. Never take it from the end user or from `unsignedTransaction`. User-supplied addresses in `context` expand the vault/spender whitelist and defeat Shield.
+
+  Shield stays offline; fetching OAVs is the caller’s job. Injection only widens that whitelist — `from` / owner / receiver, method, calldata, and amount checks still apply.
 
 ### Verifying Binary Integrity
 

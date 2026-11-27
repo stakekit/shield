@@ -6,6 +6,7 @@ export interface ValidationResult {
     matchedTypes?: TransactionType[];
     supportedTypes?: TransactionType[];
     warning?: string;
+    flags?: string[]; // non-blocking signals, e.g. 'ZERO_AMOUNT'
     attempts?: {
       type?: TransactionType;
       reason?: string;
@@ -17,6 +18,12 @@ export interface ValidationResult {
 export type ActionArguments = {
   /** Declared intent amount in base units (wei) — must exactly match calldata units. Integer string. */
   amount?: string;
+  /**
+   * Declared exit share amount in vault-share base units (wei integer string).
+   * Same contract as `amount`: no decimal conversion.
+   * (not human-readable `shareAmount`). Used only for ERC-4626 `redeem` intent checks.
+   */
+  shareAmount?: string;
   /** Informational only: token decimals for the declared amount. Not used in comparison. */
   decimals?: number;
   validatorAddress?: string;
@@ -43,6 +50,8 @@ export interface FeeConfiguration {
   depositFeeBps?: number;
   feeRecipientAddress?: string;
   allocatorVaultAddress?: string;
+  /** Input token of the injected OAV. Required for injected-OAV APPROVAL. */
+  allocatorVaultInputTokenAddress?: string;
 }
 
 export interface ValidationContext {

@@ -21,6 +21,9 @@ const RECEIVER_ADDRESS = '0x2222222222222222222222222222222222222222';
 const CHAIN_ID = 42161; // Arbitrum
 const DEPOSIT_WEI = ethers.parseUnits('1000', 6); // 1000 USDC
 const DECLARED = DEPOSIT_WEI.toString(); // '1000000000'
+// Real kiln-set address (from monorepo list) used as allocator on a 6/18 vault
+const KILN_ALLOCATOR = '0x75e4ce661a49b6bfb2d5b1a8231e32ab47f8b706';
+const KILN_PARENT_VAULT = '0xfee1000000000000000000000000000000000004';
 
 // ---------------------------------------------------------------------------
 // ABI interfaces for building calldata
@@ -102,6 +105,23 @@ const mockConfig: VaultConfiguration = {
       canEnter: true,
       canExit: true,
       allocatorVaults: [ALLOCATOR_VAULT_ADDRESS],
+      inputTokenDecimals: 6,
+      vaultTokenDecimals: 18,
+    },
+    {
+      address: KILN_PARENT_VAULT.toLowerCase(),
+      chainId: CHAIN_ID,
+      protocol: 'morpho',
+      yieldId: 'arbitrum-usdc-kiln-margin-vault',
+      inputTokenAddress: INPUT_TOKEN.toLowerCase(),
+      vaultTokenAddress: KILN_PARENT_VAULT.toLowerCase(),
+      network: 'arbitrum',
+      isWethVault: false,
+      canEnter: true,
+      canExit: true,
+      inputTokenDecimals: 6,
+      vaultTokenDecimals: 18,
+      allocatorVaults: [KILN_ALLOCATOR.toLowerCase()],
     },
   ],
   lastUpdated: Date.now(),
@@ -377,12 +397,12 @@ describe('ERC4626Validator', () => {
       expect(result.reason).toContain('not to WETH contract');
     });
 
-    it('should reject zero ETH value', () => {
+    it('should accept zero ETH value wrap with ZERO_AMOUNT flag', () => {
       const data = wethIface.encodeFunctionData('deposit', []);
       const tx = buildTx({ to: WETH_ARBITRUM, data, value: '0x0' });
       const result = validator.validate(tx, TransactionType.WRAP, USER_ADDRESS);
-      expect(result.isValid).toBe(false);
-      expect(result.reason).toContain('must send ETH value');
+      expect(result.isValid).toBe(true);
+      expect(result.details?.flags).toContain('ZERO_AMOUNT');
     });
 
     it('should reject non-deposit function selector', () => {
@@ -461,6 +481,28 @@ describe('ERC4626Validator', () => {
           USER_ADDRESS,
         );
         expect(result.isValid).toBe(true);
+      });
+      it('accepts wrap value 0 matching declared amount 0 with ZERO_AMOUNT flag', () => {
+        const result = validator.validate(
+          wrapTx(0n),
+          TransactionType.WRAP,
+          USER_ADDRESS,
+          { amount: '0' },
+        );
+        expect(result.isValid).toBe(true);
+        expect(result.details?.flags).toContain('ZERO_AMOUNT');
+      });
+      it('rejects wrap value 0 when declared amount is non-zero', () => {
+        const result = validator.validate(
+          wrapTx(0n),
+          TransactionType.WRAP,
+          USER_ADDRESS,
+          { amount: ONE_ETH.toString() },
+        );
+        expect(result.isValid).toBe(false);
+        expect(result.reason).toContain(
+          'WRAP amount does not match declared intent',
+        );
       });
     });
   });
@@ -653,7 +695,7 @@ describe('ERC4626Validator', () => {
       expect(result.reason).toContain('should not send ETH');
     });
 
-    it('should reject zero-amount deposit', () => {
+    it('should accept zero-amount deposit with ZERO_AMOUNT flag', () => {
       const data = erc4626Iface.encodeFunctionData('deposit', [
         0,
         USER_ADDRESS,
@@ -664,8 +706,38 @@ describe('ERC4626Validator', () => {
         TransactionType.SUPPLY,
         USER_ADDRESS,
       );
+      expect(result.isValid).toBe(true);
+      expect(result.details?.flags).toContain('ZERO_AMOUNT');
+    });
+
+    it('should still block zero-amount supply to a non-whitelisted vault', () => {
+      const data = erc4626Iface.encodeFunctionData('deposit', [
+        0,
+        USER_ADDRESS,
+      ]);
+      const tx = buildTx({ to: MALICIOUS_ADDRESS, data, value: '0x0' });
+      const result = validator.validate(
+        tx,
+        TransactionType.SUPPLY,
+        USER_ADDRESS,
+      );
       expect(result.isValid).toBe(false);
-      expect(result.reason).toContain('zero');
+      expect(result.reason).toContain('not whitelisted');
+    });
+
+    it('should still block zero-amount supply when receiver != expected', () => {
+      const data = erc4626Iface.encodeFunctionData('deposit', [
+        0,
+        OTHER_ADDRESS,
+      ]);
+      const tx = buildTx({ to: VAULT_ADDRESS, data, value: '0x0' });
+      const result = validator.validate(
+        tx,
+        TransactionType.SUPPLY,
+        USER_ADDRESS,
+      );
+      expect(result.isValid).toBe(false);
+      expect(result.reason).toContain('does not match expected address');
     });
     describe('amount intent validation', () => {
       const depositTx = (assets: bigint) => {
@@ -864,7 +936,7 @@ describe('ERC4626Validator', () => {
         expect(result.isValid).toBe(false);
         expect(result.reason).toContain('tampered');
       });
-      it('should reject zero-amount 3-arg deposit', () => {
+      it('should accept zero-amount 3-arg deposit with ZERO_AMOUNT flag', () => {
         const data = erc4626ReferralIface.encodeFunctionData('deposit', [
           0,
           USER_ADDRESS,
@@ -876,8 +948,8 @@ describe('ERC4626Validator', () => {
           TransactionType.SUPPLY,
           USER_ADDRESS,
         );
-        expect(result.isValid).toBe(false);
-        expect(result.reason).toContain('zero');
+        expect(result.isValid).toBe(true);
+        expect(result.details?.flags).toContain('ZERO_AMOUNT');
       });
       it('should reject 3-arg deposit to non-whitelisted vault', () => {
         const data = erc4626ReferralIface.encodeFunctionData('deposit', [
@@ -1025,7 +1097,7 @@ describe('ERC4626Validator', () => {
       expect(result.isValid).toBe(false);
     });
 
-    it('should reject zero-amount withdraw', () => {
+    it('should accept zero-amount withdraw with ZERO_AMOUNT flag', () => {
       const data = erc4626Iface.encodeFunctionData(
         'withdraw(uint256,address,address)',
         [0, USER_ADDRESS, USER_ADDRESS],
@@ -1036,8 +1108,402 @@ describe('ERC4626Validator', () => {
         TransactionType.WITHDRAW,
         USER_ADDRESS,
       );
+      expect(result.isValid).toBe(true);
+      expect(result.details?.flags).toContain('ZERO_AMOUNT');
+    });
+
+    it('should still block zero-amount withdraw when owner != user', () => {
+      const data = erc4626Iface.encodeFunctionData(
+        'withdraw(uint256,address,address)',
+        [0, USER_ADDRESS, OTHER_ADDRESS],
+      );
+      const tx = buildTx({ to: VAULT_ADDRESS, data, value: '0x0' });
+      const result = validator.validate(
+        tx,
+        TransactionType.WITHDRAW,
+        USER_ADDRESS,
+      );
       expect(result.isValid).toBe(false);
-      expect(result.reason).toContain('zero');
+      expect(result.reason).toContain('Owner address does not match');
+    });
+
+    describe('amount intent validation', () => {
+      // Asset wei — reuse enter-side scale (1000 USDC @ 6 decimals).
+      const WITHDRAW_WEI = DEPOSIT_WEI; // 1000000000n
+      const DECLARED_ASSETS = DECLARED; // '1000000000'
+      // Share wei — small integers so margin "10" (no feeConfig / no vault decimals) is easy to hit.
+      const SHARE_WEI = 1000n;
+      const DECLARED_SHARES = '1000';
+      const withdrawTx = (assets: bigint) => {
+        const data = erc4626Iface.encodeFunctionData(
+          'withdraw(uint256,address,address)',
+          [assets, USER_ADDRESS, USER_ADDRESS],
+        );
+        return buildTx({ to: VAULT_ADDRESS, data, value: '0x0' });
+      };
+      const redeemTx = (shares: bigint) => {
+        const data = erc4626Iface.encodeFunctionData(
+          'redeem(uint256,address,address)',
+          [shares, USER_ADDRESS, USER_ADDRESS],
+        );
+        return buildTx({ to: VAULT_ADDRESS, data, value: '0x0' });
+      };
+      // withdraw: within-margin match vs args.amount (margin "10")
+      it('accepts withdraw exactly matching the declared amount', () => {
+        const result = validator.validate(
+          withdrawTx(WITHDRAW_WEI),
+          TransactionType.WITHDRAW,
+          USER_ADDRESS,
+          { amount: DECLARED_ASSETS },
+        );
+        expect(result.isValid).toBe(true);
+      });
+      it('skips amount enforcement on withdraw when args.amount is absent (back-compat)', () => {
+        const result = validator.validate(
+          withdrawTx(WITHDRAW_WEI * 7n),
+          TransactionType.WITHDRAW,
+          USER_ADDRESS,
+        );
+        expect(result.isValid).toBe(true);
+      });
+      it('rejects withdraw when only shareAmount is declared (fail-closed, no redeem→withdraw bypass)', () => {
+        const result = validator.validate(
+          withdrawTx(WITHDRAW_WEI),
+          TransactionType.WITHDRAW,
+          USER_ADDRESS,
+          { shareAmount: DECLARED_SHARES },
+        );
+        expect(result.isValid).toBe(false);
+        expect(result.reason).toContain(
+          'Cannot verify withdraw (asset-denominated) against declared shareAmount',
+        );
+      });
+      it('accepts withdraw within ASSET_WITHDRAW_EXIT_MARGIN above declared (Δ=10)', () => {
+        const result = validator.validate(
+          withdrawTx(WITHDRAW_WEI + 10n),
+          TransactionType.WITHDRAW,
+          USER_ADDRESS,
+          { amount: DECLARED_ASSETS },
+        );
+        expect(result.isValid).toBe(true);
+      });
+      it('accepts withdraw within margin below declared (Δ=5)', () => {
+        const result = validator.validate(
+          withdrawTx(WITHDRAW_WEI - 5n),
+          TransactionType.WITHDRAW,
+          USER_ADDRESS,
+          { amount: DECLARED_ASSETS },
+        );
+        expect(result.isValid).toBe(true);
+      });
+      it('rejects withdraw outside margin (Δ=11)', () => {
+        const result = validator.validate(
+          withdrawTx(WITHDRAW_WEI + 11n),
+          TransactionType.WITHDRAW,
+          USER_ADDRESS,
+          { amount: DECLARED_ASSETS },
+        );
+        expect(result.isValid).toBe(false);
+        expect(result.reason).toContain('does not match declared intent');
+      });
+      // --- redeem: within-margin match vs args.shareAmount ---
+      // mockConfig vault has no decimals  → margin "10"
+      it('accepts redeem exactly matching the declared shareAmount', () => {
+        const result = validator.validate(
+          redeemTx(SHARE_WEI),
+          TransactionType.WITHDRAW,
+          USER_ADDRESS,
+          { shareAmount: DECLARED_SHARES },
+        );
+        expect(result.isValid).toBe(true);
+      });
+      it('accepts redeem within margin above declared shareAmount (snap-up, Δ=5 ≤ 10)', () => {
+        const result = validator.validate(
+          redeemTx(SHARE_WEI + 5n),
+          TransactionType.WITHDRAW,
+          USER_ADDRESS,
+          { shareAmount: DECLARED_SHARES },
+        );
+        expect(result.isValid).toBe(true);
+      });
+      it('accepts redeem within margin below declared shareAmount (snap-down, Δ=5 ≤ 10)', () => {
+        const result = validator.validate(
+          redeemTx(SHARE_WEI - 5n),
+          TransactionType.WITHDRAW,
+          USER_ADDRESS,
+          { shareAmount: DECLARED_SHARES },
+        );
+        expect(result.isValid).toBe(true);
+      });
+      it('rejects redeem outside margin (Δ=11 > 10)', () => {
+        const result = validator.validate(
+          redeemTx(SHARE_WEI + 11n),
+          TransactionType.WITHDRAW,
+          USER_ADDRESS,
+          { shareAmount: DECLARED_SHARES },
+        );
+        expect(result.isValid).toBe(false);
+        expect(result.reason).toContain('does not match declared intent');
+      });
+      it('rejects redeem when only amount is declared (fail-closed, no withdraw→redeem bypass)', () => {
+        const result = validator.validate(
+          redeemTx(SHARE_WEI),
+          TransactionType.WITHDRAW,
+          USER_ADDRESS,
+          { amount: DECLARED_ASSETS },
+        );
+        expect(result.isValid).toBe(false);
+        expect(result.reason).toContain(
+          'Cannot verify redeem (share-denominated) against declared asset amount',
+        );
+      });
+      it('skips shareAmount enforcement on redeem when args.shareAmount is absent (back-compat)', () => {
+        const result = validator.validate(
+          redeemTx(SHARE_WEI * 7n),
+          TransactionType.WITHDRAW,
+          USER_ADDRESS,
+        );
+        expect(result.isValid).toBe(true);
+      });
+      // --- cross-cutting guards (fire in validate() before routing) ---
+      it('rejects when both amount and shareAmount are declared', () => {
+        const result = validator.validate(
+          withdrawTx(WITHDRAW_WEI),
+          TransactionType.WITHDRAW,
+          USER_ADDRESS,
+          { amount: DECLARED_ASSETS, shareAmount: DECLARED_SHARES },
+        );
+        expect(result.isValid).toBe(false);
+        expect(result.reason).toContain(
+          'Cannot declare both amount and shareAmount',
+        );
+      });
+      it('blocks a human-readable declared amount ("0.01") with an explicit reason', () => {
+        const result = validator.validate(
+          withdrawTx(WITHDRAW_WEI),
+          TransactionType.WITHDRAW,
+          USER_ADDRESS,
+          { amount: '0.01', decimals: 6 },
+        );
+        expect(result.isValid).toBe(false);
+        expect(result.reason).toContain(
+          'Declared amount must be a base-unit integer string (wei)',
+        );
+      });
+      it('blocks a human-readable declared shareAmount ("0.01") with an explicit reason', () => {
+        const result = validator.validate(
+          redeemTx(SHARE_WEI),
+          TransactionType.WITHDRAW,
+          USER_ADDRESS,
+          { shareAmount: '0.01' },
+        );
+        expect(result.isValid).toBe(false);
+        expect(result.reason).toContain(
+          'Declared shareAmount must be a base-unit integer string (share wei)',
+        );
+      });
+      it('blocks a non-numeric declared shareAmount before any type-specific validation', () => {
+        const result = validator.validate(
+          redeemTx(SHARE_WEI),
+          TransactionType.APPROVAL, // guard fires pre-routing; type is irrelevant
+          USER_ADDRESS,
+          { shareAmount: 'abc' },
+        );
+        expect(result.isValid).toBe(false);
+        expect(result.reason).toContain('base-unit integer string');
+      });
+    });
+    describe('redeem margin — allocator / kiln ', () => {
+      const SHARE_WEI = 1000n;
+      const DECLARED_SHARES = '1000';
+      const WIDE = 10n ** 13n;
+      const redeemTo = (to: string, shares: bigint) => {
+        const data = erc4626Iface.encodeFunctionData(
+          'redeem(uint256,address,address)',
+          [shares, USER_ADDRESS, USER_ADDRESS],
+        );
+        return buildTx({ to, data, value: '0x0' });
+      };
+      it('accepts redeem to ALLOCATOR within decimal-gap margin (Δ=10^13)', () => {
+        expect(
+          validator.validate(
+            redeemTo(ALLOCATOR_VAULT_ADDRESS, SHARE_WEI + WIDE),
+            TransactionType.WITHDRAW,
+            USER_ADDRESS,
+            { shareAmount: DECLARED_SHARES },
+          ).isValid,
+        ).toBe(true);
+      });
+      it('rejects redeem to ALLOCATOR outside decimal-gap margin', () => {
+        const result = validator.validate(
+          redeemTo(ALLOCATOR_VAULT_ADDRESS, SHARE_WEI + WIDE + 1n),
+          TransactionType.WITHDRAW,
+          USER_ADDRESS,
+          { shareAmount: DECLARED_SHARES },
+        );
+        expect(result.isValid).toBe(false);
+      });
+      it('keeps margin 10 on Morpho underlying (Δ=11 blocked, Δ=5 ok)', () => {
+        expect(
+          validator.validate(
+            redeemTo(MORPHO_VAULT_ADDRESS, SHARE_WEI + 5n),
+            TransactionType.WITHDRAW,
+            USER_ADDRESS,
+            { shareAmount: DECLARED_SHARES },
+          ).isValid,
+        ).toBe(true);
+        expect(
+          validator.validate(
+            redeemTo(MORPHO_VAULT_ADDRESS, SHARE_WEI + 11n),
+            TransactionType.WITHDRAW,
+            USER_ADDRESS,
+            { shareAmount: DECLARED_SHARES },
+          ).isValid,
+        ).toBe(false);
+      });
+      it('forces margin 10 for kiln-set allocator even with 6/18 parent', () => {
+        expect(
+          validator.validate(
+            redeemTo(KILN_ALLOCATOR, SHARE_WEI + 5n),
+            TransactionType.WITHDRAW,
+            USER_ADDRESS,
+            { shareAmount: DECLARED_SHARES },
+          ).isValid,
+        ).toBe(true);
+        expect(
+          validator.validate(
+            redeemTo(KILN_ALLOCATOR, SHARE_WEI + 11n),
+            TransactionType.WITHDRAW,
+            USER_ADDRESS,
+            { shareAmount: DECLARED_SHARES },
+          ).isValid,
+        ).toBe(false);
+      });
+    });
+    // =========================================================================
+    // shareAmount method-swap fail-closed
+    // =========================================================================
+    describe('shareAmount method-swap fail-closed', () => {
+      const SHARE_ARGS = { shareAmount: '1000' };
+      it('rejects APPROVAL when shareAmount is declared', () => {
+        const data = erc20Iface.encodeFunctionData('approve', [
+          VAULT_ADDRESS,
+          DEPOSIT_WEI,
+        ]);
+        const tx = buildTx({ to: INPUT_TOKEN, data, value: '0x0' });
+        const result = validator.validate(
+          tx,
+          TransactionType.APPROVAL,
+          USER_ADDRESS,
+          SHARE_ARGS,
+        );
+        expect(result.isValid).toBe(false);
+        expect(result.reason).toContain(
+          'Declared shareAmount is only valid for ERC-4626 exit transactions',
+        );
+      });
+      it('rejects WRAP when shareAmount is declared', () => {
+        const data = wethIface.encodeFunctionData('deposit', []);
+        const tx = buildTx({
+          to: WETH_ARBITRUM,
+          data,
+          value: '0xde0b6b3a7640000',
+        });
+        const result = validator.validate(
+          tx,
+          TransactionType.WRAP,
+          USER_ADDRESS,
+          SHARE_ARGS,
+        );
+        expect(result.isValid).toBe(false);
+        expect(result.reason).toContain(
+          'Declared shareAmount is only valid for ERC-4626 exit transactions',
+        );
+      });
+      it('rejects SUPPLY deposit when shareAmount is declared', () => {
+        const data = erc4626Iface.encodeFunctionData('deposit', [
+          DEPOSIT_WEI,
+          USER_ADDRESS,
+        ]);
+        const tx = buildTx({ to: VAULT_ADDRESS, data, value: '0x0' });
+        const result = validator.validate(
+          tx,
+          TransactionType.SUPPLY,
+          USER_ADDRESS,
+          SHARE_ARGS,
+        );
+        expect(result.isValid).toBe(false);
+        expect(result.reason).toContain(
+          'Declared shareAmount is only valid for ERC-4626 exit transactions',
+        );
+      });
+      it('rejects SUPPLY mint when shareAmount is declared', () => {
+        const data = erc4626Iface.encodeFunctionData('mint', [
+          1000n,
+          USER_ADDRESS,
+        ]);
+        const tx = buildTx({ to: VAULT_ADDRESS, data, value: '0x0' });
+        const result = validator.validate(
+          tx,
+          TransactionType.SUPPLY,
+          USER_ADDRESS,
+          SHARE_ARGS,
+        );
+        expect(result.isValid).toBe(false);
+        expect(result.reason).toContain(
+          'Declared shareAmount is only valid for ERC-4626 exit transactions',
+        );
+      });
+      it('allows UNWRAP structurally when shareAmount is declared (WETH exit follow-up)', () => {
+        const data = wethIface.encodeFunctionData('withdraw', [
+          ethers.parseEther('1'),
+        ]);
+        const tx = buildTx({ to: WETH_ARBITRUM, data, value: '0x0' });
+        const result = validator.validate(
+          tx,
+          TransactionType.UNWRAP,
+          USER_ADDRESS,
+          SHARE_ARGS,
+        );
+        expect(result.isValid).toBe(true);
+      });
+      // WITHDRAW withdraw vs redeem already covered in
+      // describe('WITHDRAW…').describe('amount intent validation'):
+      // - rejects withdraw + shareAmount
+      // - rejects redeem + amount
+      // - accepts redeem + shareAmount
+      // Re-assert here so the method-swap suite is self-contained:
+      it('still rejects withdraw calldata when shareAmount is declared', () => {
+        const data = erc4626Iface.encodeFunctionData(
+          'withdraw(uint256,address,address)',
+          [DEPOSIT_WEI, USER_ADDRESS, USER_ADDRESS],
+        );
+        const tx = buildTx({ to: VAULT_ADDRESS, data, value: '0x0' });
+        const result = validator.validate(
+          tx,
+          TransactionType.WITHDRAW,
+          USER_ADDRESS,
+          SHARE_ARGS,
+        );
+        expect(result.isValid).toBe(false);
+        expect(result.reason).toContain(
+          'Cannot verify withdraw (asset-denominated) against declared shareAmount',
+        );
+      });
+      it('still accepts redeem calldata matching shareAmount', () => {
+        const data = erc4626Iface.encodeFunctionData(
+          'redeem(uint256,address,address)',
+          [1000n, USER_ADDRESS, USER_ADDRESS],
+        );
+        const tx = buildTx({ to: VAULT_ADDRESS, data, value: '0x0' });
+        const result = validator.validate(
+          tx,
+          TransactionType.WITHDRAW,
+          USER_ADDRESS,
+          SHARE_ARGS,
+        );
+        expect(result.isValid).toBe(true);
+      });
     });
   });
 
@@ -1156,7 +1622,7 @@ describe('ERC4626Validator', () => {
       expect(result.isValid).toBe(true);
     });
 
-    it('should reject zero amount', () => {
+    it('should accept zero amount with ZERO_AMOUNT flag', () => {
       const data = wethIface.encodeFunctionData('withdraw', [0]);
       const tx = buildTx({ to: WETH_ARBITRUM, data, value: '0x0' });
       const result = validator.validate(
@@ -1164,8 +1630,8 @@ describe('ERC4626Validator', () => {
         TransactionType.UNWRAP,
         USER_ADDRESS,
       );
-      expect(result.isValid).toBe(false);
-      expect(result.reason).toContain('UNWRAP amount is zero');
+      expect(result.isValid).toBe(true);
+      expect(result.details?.flags).toContain('ZERO_AMOUNT');
     });
 
     it('should reject wrong WETH address', () => {
@@ -1660,6 +2126,300 @@ describe('ERC4626Validator', () => {
       ]);
       const tx = buildTx({ to: VAULT_ADDRESS, data, value: '0x0' });
       const result = plainValidator.validate(
+        tx,
+        TransactionType.SUPPLY,
+        USER_ADDRESS,
+      );
+      expect(result.isValid).toBe(true);
+    });
+  });
+  describe('context-injected allocator vaults (runtime OAV)', () => {
+    const INJECTED_ALLOCATOR_VAULT_ADDRESS =
+      '0x0bb69b79bc829e1cfcc34a740110886d98d2bd14';
+    const baseVault = {
+      address: VAULT_ADDRESS.toLowerCase(),
+      chainId: CHAIN_ID,
+      protocol: 'morpho',
+      yieldId: 'arbitrum-usdc-runtime-oav-base-vault',
+      inputTokenAddress: INPUT_TOKEN.toLowerCase(),
+      vaultTokenAddress: VAULT_ADDRESS.toLowerCase(),
+      network: 'arbitrum',
+      isWethVault: false,
+      canEnter: true,
+      canExit: true,
+      inputTokenDecimals: 6,
+      vaultTokenDecimals: 18,
+    };
+    const runtimeValidator = new ERC4626Validator({
+      vaults: [baseVault],
+      lastUpdated: Date.now(),
+    });
+    const staticAllocatorValidator = new ERC4626Validator({
+      vaults: [
+        {
+          ...baseVault,
+          allocatorVaults: [ALLOCATOR_VAULT_ADDRESS],
+        },
+      ],
+      lastUpdated: Date.now(),
+    });
+    const runtimeContext = {
+      feeConfiguration: [
+        {
+          allocatorVaultAddress: INJECTED_ALLOCATOR_VAULT_ADDRESS,
+        },
+      ],
+    };
+
+    const runtimeContextWithInputToken = {
+      feeConfiguration: [
+        {
+          allocatorVaultAddress: INJECTED_ALLOCATOR_VAULT_ADDRESS,
+          allocatorVaultInputTokenAddress: INPUT_TOKEN,
+        },
+      ],
+    };
+
+    const META_OAV_INPUT_TOKEN = '0x82af49447d8a07e3bd95bd0d56f35241523fbab1';
+
+    const runtimeContextWithMetaInputToken = {
+      feeConfiguration: [
+        {
+          allocatorVaultAddress: INJECTED_ALLOCATOR_VAULT_ADDRESS,
+          allocatorVaultInputTokenAddress: META_OAV_INPUT_TOKEN,
+        },
+      ],
+    };
+
+    it('should validate SUPPLY deposit to a context-injected allocator vault', () => {
+      const data = erc4626Iface.encodeFunctionData('deposit', [
+        ethers.parseUnits('1000', 6),
+        USER_ADDRESS,
+      ]);
+      const tx = buildTx({
+        to: INJECTED_ALLOCATOR_VAULT_ADDRESS,
+        data,
+        value: '0x0',
+      });
+      const result = runtimeValidator.validate(
+        tx,
+        TransactionType.SUPPLY,
+        USER_ADDRESS,
+        undefined,
+        runtimeContext,
+      );
+      expect(result.isValid).toBe(true);
+    });
+    it('should validate SUPPLY mint to a context-injected allocator vault', () => {
+      const data = erc4626Iface.encodeFunctionData('mint', [
+        ethers.parseUnits('500', 18),
+        USER_ADDRESS,
+      ]);
+      const tx = buildTx({
+        to: INJECTED_ALLOCATOR_VAULT_ADDRESS,
+        data,
+        value: '0x0',
+      });
+      const result = runtimeValidator.validate(
+        tx,
+        TransactionType.SUPPLY,
+        USER_ADDRESS,
+        undefined,
+        runtimeContext,
+      );
+      expect(result.isValid).toBe(true);
+    });
+    it('should validate WITHDRAW withdraw from a context-injected allocator vault', () => {
+      const data = erc4626Iface.encodeFunctionData(
+        'withdraw(uint256,address,address)',
+        [ethers.parseUnits('1000', 6), USER_ADDRESS, USER_ADDRESS],
+      );
+      const tx = buildTx({
+        to: INJECTED_ALLOCATOR_VAULT_ADDRESS,
+        data,
+        value: '0x0',
+      });
+      const result = runtimeValidator.validate(
+        tx,
+        TransactionType.WITHDRAW,
+        USER_ADDRESS,
+        undefined,
+        runtimeContext,
+      );
+      expect(result.isValid).toBe(true);
+    });
+    it('should validate WITHDRAW redeem from a context-injected allocator vault', () => {
+      const data = erc4626Iface.encodeFunctionData(
+        'redeem(uint256,address,address)',
+        [ethers.parseUnits('500', 18), USER_ADDRESS, USER_ADDRESS],
+      );
+      const tx = buildTx({
+        to: INJECTED_ALLOCATOR_VAULT_ADDRESS,
+        data,
+        value: '0x0',
+      });
+      const result = runtimeValidator.validate(
+        tx,
+        TransactionType.WITHDRAW,
+        USER_ADDRESS,
+        undefined,
+        runtimeContext,
+      );
+      expect(result.isValid).toBe(true);
+    });
+    it('should validate APPROVAL of the base input token to a context-injected allocator vault', () => {
+      const data = erc20Iface.encodeFunctionData('approve', [
+        INJECTED_ALLOCATOR_VAULT_ADDRESS,
+        ethers.parseUnits('1000', 6),
+      ]);
+      const tx = buildTx({
+        to: INPUT_TOKEN,
+        data,
+        value: '0x0',
+      });
+      const result = runtimeValidator.validate(
+        tx,
+        TransactionType.APPROVAL,
+        USER_ADDRESS,
+        undefined,
+        runtimeContextWithInputToken,
+      );
+      expect(result.isValid).toBe(true);
+    });
+    it('should reject APPROVAL of the wrong token to a context-injected allocator vault', () => {
+      const data = erc20Iface.encodeFunctionData('approve', [
+        INJECTED_ALLOCATOR_VAULT_ADDRESS,
+        ethers.parseUnits('1000', 6),
+      ]);
+      const tx = buildTx({
+        to: OTHER_ADDRESS,
+        data,
+        value: '0x0',
+      });
+      const result = runtimeValidator.validate(
+        tx,
+        TransactionType.APPROVAL,
+        USER_ADDRESS,
+        undefined,
+        runtimeContextWithInputToken,
+      );
+      expect(result.isValid).toBe(false);
+      expect(result.reason).toContain(
+        'Approval token does not match vault input token',
+      );
+    });
+    it('should reject APPROVAL of an injected OAV when allocatorVaultInputTokenAddress is omitted', () => {
+      const data = erc20Iface.encodeFunctionData('approve', [
+        INJECTED_ALLOCATOR_VAULT_ADDRESS,
+        ethers.parseUnits('1000', 6),
+      ]);
+      const tx = buildTx({
+        to: INPUT_TOKEN,
+        data,
+        value: '0x0',
+      });
+      const result = runtimeValidator.validate(
+        tx,
+        TransactionType.APPROVAL,
+        USER_ADDRESS,
+        undefined,
+        runtimeContext,
+      );
+      expect(result.isValid).toBe(false);
+      expect(result.reason).toContain(
+        'Approval spender is not a whitelisted vault',
+      );
+    });
+    it('should reject APPROVAL when injected OAV input token does not match the token', () => {
+      const data = erc20Iface.encodeFunctionData('approve', [
+        INJECTED_ALLOCATOR_VAULT_ADDRESS,
+        ethers.parseUnits('1000', 6),
+      ]);
+      const tx = buildTx({
+        to: INPUT_TOKEN,
+        data,
+        value: '0x0',
+      });
+      const result = runtimeValidator.validate(
+        tx,
+        TransactionType.APPROVAL,
+        USER_ADDRESS,
+        undefined,
+        runtimeContextWithMetaInputToken,
+      );
+      expect(result.isValid).toBe(false);
+      expect(result.reason).toContain(
+        'Approval token does not match vault input token',
+      );
+    });
+    it('should validate APPROVAL when injected OAV input token differs from the base vault token', () => {
+      const data = erc20Iface.encodeFunctionData('approve', [
+        INJECTED_ALLOCATOR_VAULT_ADDRESS,
+        ethers.parseUnits('1000', 18),
+      ]);
+      const tx = buildTx({
+        to: META_OAV_INPUT_TOKEN,
+        data,
+        value: '0x0',
+      });
+      const result = runtimeValidator.validate(
+        tx,
+        TransactionType.APPROVAL,
+        USER_ADDRESS,
+        undefined,
+        runtimeContextWithMetaInputToken,
+      );
+      expect(result.isValid).toBe(true);
+    });
+    it('should reject the injected allocator SUPPLY when context is omitted', () => {
+      const data = erc4626Iface.encodeFunctionData('deposit', [
+        ethers.parseUnits('1000', 6),
+        USER_ADDRESS,
+      ]);
+      const tx = buildTx({
+        to: INJECTED_ALLOCATOR_VAULT_ADDRESS,
+        data,
+        value: '0x0',
+      });
+      const result = runtimeValidator.validate(
+        tx,
+        TransactionType.SUPPLY,
+        USER_ADDRESS,
+      );
+      expect(result.isValid).toBe(false);
+      expect(result.reason).toContain('not whitelisted');
+    });
+    it('should reject a non-injected address when context is present', () => {
+      const data = erc4626Iface.encodeFunctionData('deposit', [
+        ethers.parseUnits('1000', 6),
+        USER_ADDRESS,
+      ]);
+      const tx = buildTx({
+        to: MALICIOUS_ADDRESS,
+        data,
+        value: '0x0',
+      });
+      const result = runtimeValidator.validate(
+        tx,
+        TransactionType.SUPPLY,
+        USER_ADDRESS,
+        undefined,
+        runtimeContext,
+      );
+      expect(result.isValid).toBe(false);
+      expect(result.reason).toContain('not whitelisted');
+    });
+    it('should continue validating a static allocator vault without context', () => {
+      const data = erc4626Iface.encodeFunctionData('deposit', [
+        ethers.parseUnits('1000', 6),
+        USER_ADDRESS,
+      ]);
+      const tx = buildTx({
+        to: ALLOCATOR_VAULT_ADDRESS,
+        data,
+        value: '0x0',
+      });
+      const result = staticAllocatorValidator.validate(
         tx,
         TransactionType.SUPPLY,
         USER_ADDRESS,

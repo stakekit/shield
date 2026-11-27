@@ -13,6 +13,8 @@ interface RegistryEntry {
   canEnter?: boolean;
   canExit?: boolean;
   allocatorVaults?: string[];
+  inputTokenDecimals?: number;
+  vaultTokenDecimals?: number;
 }
 
 interface VaultRegistry {
@@ -36,6 +38,8 @@ export function loadEmbeddedRegistry(): VaultConfiguration {
     canEnter: entry.canEnter,
     canExit: entry.canExit,
     allocatorVaults: entry.allocatorVaults?.map((a) => a.toLowerCase()),
+    inputTokenDecimals: entry.inputTokenDecimals,
+    vaultTokenDecimals: entry.vaultTokenDecimals,
   }));
 
   return {
