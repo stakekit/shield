@@ -111,8 +111,10 @@ export function tryDecode<T>(decode: () => T): Decoded<T> {
 }
 
 const INSTRUCTION_INDEX_LENGTH = 4;
-// CreateAccountWithSeed ends with lamports (u64), space (u64), owner (32 bytes).
-const CREATE_WITH_SEED_LAMPORTS_FROM_END = 48;
+// CreateAccountWithSeed: index (u32), base (32 bytes), seed length (u64),
+// seed bytes, then lamports (u64), space (u64) and owner (32 bytes).
+const CREATE_WITH_SEED_SEED_LENGTH_OFFSET = 36;
+const CREATE_WITH_SEED_SEED_OFFSET = 44;
 
 /**
  * Reads the u64 that follows the 4-byte instruction index, as in System
@@ -123,10 +125,15 @@ export function readU64AfterIndex(instruction: SolanaInstruction): bigint {
   return instruction.data.readBigUInt64LE(INSTRUCTION_INDEX_LENGTH);
 }
 
-/** Reads the lamports of a System `CreateAccountWithSeed` exactly. */
+/**
+ * Reads the lamports of a System `CreateAccountWithSeed` exactly. The offset
+ * is taken from the seed length, not the end of the data, because trailing
+ * bytes are ignored when the instruction is decoded.
+ */
 export function readCreateWithSeedLamports(
   instruction: SolanaInstruction,
 ): bigint {
   const { data } = instruction;
-  return data.readBigUInt64LE(data.length - CREATE_WITH_SEED_LAMPORTS_FROM_END);
+  const seedLength = data.readUInt32LE(CREATE_WITH_SEED_SEED_LENGTH_OFFSET);
+  return data.readBigUInt64LE(CREATE_WITH_SEED_SEED_OFFSET + seedLength);
 }

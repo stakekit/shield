@@ -344,6 +344,26 @@ describe('MarinadeNativeValidator amounts above 2^53 lamports', () => {
     );
   });
 
+  it('reads the stake amount at its fixed offset when data has trailing bytes', () => {
+    const tampered = mutate(
+      NATIVE_FIXTURES.stake,
+      replaceData(0, (data) => {
+        data.writeBigUInt64LE(
+          unsafe,
+          data.length - CREATE_WITH_SEED_LAMPORTS_FROM_END,
+        );
+        const trailing = Buffer.alloc(CREATE_WITH_SEED_LAMPORTS_FROM_END);
+        trailing.writeBigUInt64LE(2_000_000_000n, 0);
+        return Buffer.concat([data, trailing]);
+      }),
+    );
+
+    expect(validate(tampered, { amount: '2000000000' }).isValid).toBe(false);
+    expect(validate(tampered, { amount: unsafe.toString() }).isValid).toBe(
+      true,
+    );
+  });
+
   it('compares the memo amount as an integer', () => {
     expect(
       validate(NATIVE_FIXTURES.unstake, { amount: '01000000000' }).isValid,

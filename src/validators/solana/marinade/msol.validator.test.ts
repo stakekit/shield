@@ -246,6 +246,20 @@ describe('MarinadeMsolValidator via Shield', () => {
       expect(validate(tampered).isValid).toBe(false);
     });
 
+    it('reads the ticket funding at its fixed offset when data has trailing bytes', () => {
+      const tampered = mutate(
+        MSOL_FIXTURES.unstakeDelayed,
+        replaceData((data) => {
+          data.writeBigUInt64LE(100_000_000_000n, data.length - 48);
+          const trailing = Buffer.alloc(48);
+          trailing.writeBigUInt64LE(1_503_360n, 0);
+          return Buffer.concat([data, trailing]);
+        }, 0),
+      );
+
+      expect(validate(tampered).isValid).toBe(false);
+    });
+
     it('rejects a delayed unstake ticket with the wrong size', () => {
       const tampered = mutate(
         MSOL_FIXTURES.unstakeDelayed,
