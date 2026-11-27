@@ -3476,6 +3476,80 @@ describe('SolanaNativeStakingValidator via Shield', () => {
       ).toBe(true);
     });
 
+    describe('SPLIT without Merge prefix and stakeAccounts allowlist', () => {
+      const buildPlainSplitTx = (sourceStake: PublicKey): string => {
+        const userPubkey = new PublicKey(userAddress);
+        const newStake = new PublicKey(
+          '9ZmDXFKKaLb5ct3cqbfqHzJPaag4KbZdk3HgAVfCWpMc',
+        );
+        const transaction = new Transaction();
+        transaction.add(
+          ComputeBudgetProgram.setComputeUnitLimit({ units: 350000 }),
+        );
+        transaction.add(
+          ComputeBudgetProgram.setComputeUnitPrice({ microLamports: 1 }),
+        );
+        const splitWithSeedTx = StakeProgram.splitWithSeed(
+          {
+            stakePubkey: sourceStake,
+            authorizedPubkey: userPubkey,
+            splitStakePubkey: newStake,
+            basePubkey: userPubkey,
+            seed: 'split',
+            lamports: 50000000,
+          },
+          2282880,
+        );
+        transaction.add(...splitWithSeedTx.instructions);
+        transaction.add(
+          StakeProgram.deactivate({
+            stakePubkey: newStake,
+            authorizedPubkey: userPubkey,
+          }),
+        );
+        transaction.recentBlockhash = '11111111111111111111111111111111';
+        transaction.feePayer = userPubkey;
+        return transaction
+          .serialize({ requireAllSignatures: false, verifySignatures: false })
+          .toString('hex');
+      };
+      const sourceStake = new PublicKey(
+        'HzcH95P8DJnmjWfNLKeWYrNSYuMrbAGcp6MhXwWfeezk',
+      );
+
+      it('should accept when Split source is in stakeAccounts', () => {
+        const result = shield.validate({
+          yieldId,
+          unsignedTransaction: buildPlainSplitTx(sourceStake),
+          userAddress,
+          args: { stakeAccounts: [sourceStake.toBase58()] },
+        });
+
+        expect(result.isValid).toBe(true);
+        expect(result.detectedType).toBe(TransactionType.SPLIT);
+      });
+
+      it('should reject when Split source is not in stakeAccounts', () => {
+        const result = shield.validate({
+          yieldId,
+          unsignedTransaction: buildPlainSplitTx(sourceStake),
+          userAddress,
+          args: {
+            stakeAccounts: ['2ejUissotvQJda8tnD9iqYbdSuz6Gv6dxDnZE8hEKwr5'],
+          },
+        });
+
+        expect(result.isValid).toBe(false);
+        expect(
+          result.details?.attempts?.some((attempt) =>
+            attempt.reason?.includes(
+              'Split source stake account is not in stakeAccounts',
+            ),
+          ),
+        ).toBe(true);
+      });
+    });
+
     it('should reject SPLIT when Merge appears after AllocateWithSeed', () => {
       const userPubkey = new PublicKey(userAddress);
       const sourceStake = new PublicKey(
@@ -3541,9 +3615,11 @@ describe('SolanaNativeStakingValidator via Shield', () => {
       expect(
         result.details?.attempts?.some(
           (attempt) =>
-            attempt.reason?.includes(
+            (attempt.reason?.includes(
               'Invalid SPLIT instruction layout after Merge prefix',
-            ) || attempt.reason?.includes('Missing or invalid Transfer'),
+            ) ??
+              false) ||
+            (attempt.reason?.includes('Missing or invalid Transfer') ?? false),
         ),
       ).toBe(true);
     });

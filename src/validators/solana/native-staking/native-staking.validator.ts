@@ -521,6 +521,18 @@ export class SolanaNativeStakingValidator extends BaseValidator {
     }
 
     const splitSource = split.accounts.at(0)?.pubkey.toBase58();
+    if (
+      !isNullOrUndefined(allowedStakeAccounts) &&
+      (isNullOrUndefined(splitSource) || !allowedStakeAccounts.has(splitSource))
+    ) {
+      return this.blocked(
+        'Split source stake account is not in stakeAccounts',
+        {
+          expected: stakeAccounts,
+          actual: splitSource,
+        },
+      );
+    }
     for (const destination of mergeDestinations) {
       if (destination !== splitSource) {
         return this.blocked(
